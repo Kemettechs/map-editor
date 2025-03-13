@@ -1,0 +1,7 @@
+#mapcanvas {
+  width: 100%;
+  height: 500px;
+  min-height: 500px; /* Ensure the height is set */
+  position: relative;
+  /* overflow: visible !important; */
+}
