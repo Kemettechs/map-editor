@@ -181,7 +181,7 @@ export default function MyMap() {
         toast.error(
           <span
             style={{
-              fontSize: "12px",
+              fontSize: "12.5px",
             }}
           >
             The curve radius must be at least 3.2 meters!
