@@ -179,7 +179,13 @@ export default function MyMap() {
 
       if (lastRadius < MIN_TURNING_RADIUS) {
         toast.error(
-          "⚠️ The curve radius must be at least 3.2 meters! Stop Drawing."
+          <span
+            style={{
+              fontSize: "12px",
+            }}
+          >
+            The curve radius must be at least 3.2 meters!
+          </span>
         );
 
         setIsDrawing(false);
