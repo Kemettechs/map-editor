@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import {
   GoogleMap,
-  Marker,
+  Polygon,
   useLoadScript,
   Polyline,
   GroundOverlay,
 } from "@react-google-maps/api";
 import Papa from "papaparse";
 import { ActionIcon, Tooltip } from "@mantine/core";
-import { toast, ToastContainer } from "react-toastify";
+import { ToastContainer } from "react-toastify";
 import {
   IconDownload,
   IconPaint,
@@ -36,7 +36,7 @@ export default function MyMap() {
     libraries, // Needed for distance calculations
   });
 
-  const [markers, setMarkers] = useState([]);
+  const markers = [];
   const zoomLevel = 15;
   const [lines, setLines] = useState([]); // Stores multiple drawn lines
   const [currentLine, setCurrentLine] = useState([]); // Current active drawing
@@ -46,6 +46,7 @@ export default function MyMap() {
   const fileInputRef = useRef(null);
   const [isMouseDown, setIsMouseDown] = useState(false); // Track mouse state
   const [bounds, setBounds] = useState(null);
+  const [polygonCoords, setPolygonCoords] = useState([]);
 
   // Function to update bounds dynamically
   const updateBounds = () => {
@@ -89,7 +90,16 @@ export default function MyMap() {
     newLines.pop(); // Remove the last drawn line
 
     setLines(newLines);
+
+    // Update the length to the previous line or reset to 0 if no lines remain
+    if (newLines.length > 0) {
+      const lastLine = newLines[newLines.length - 1]; // Get the last remaining line
+      setCurrentLength(computeLineLength(lastLine)); // Update to its length
+    } else {
+      setCurrentLength(0); // Reset to zero if no lines remain
+    }
   };
+
   // Compute length of a polyline in feet
   const computeLineLength = (line) => {
     if (window.google?.maps?.geometry) {
@@ -107,8 +117,7 @@ export default function MyMap() {
     setCurrentLine([{ lat: e.latLng.lat(), lng: e.latLng.lng() }]);
     // setCurrentLength(0);
   };
-
-  const MIN_TURNING_RADIUS = 3.2; // Minimum allowed turning radius
+  const MIN_TURNING_RADIUS = 3.2; // Minimum turning radius in meters
 
   const calculateCurvature = (path) => {
     if (path.length < 3) return [];
@@ -168,39 +177,67 @@ export default function MyMap() {
   const handleMouseMove = (e) => {
     if (!isDrawing || !isMouseDown) return;
 
-    const newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    const newLine = [...currentLine, newPoint];
+    let newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+    let tempLine = [...currentLine, newPoint];
 
-    if (newLine.length >= 3) {
-      const radii = calculateCurvature(newLine);
-      const lastRadius = radii[radii.length - 1];
+    if (tempLine.length >= 3) {
+      let radii = calculateCurvature(tempLine);
+      let lastRadius = radii[radii.length - 1];
 
-      console.log("Last Radius:", lastRadius);
+      console.log(`Last Radius: ${lastRadius}`);
 
       if (lastRadius < MIN_TURNING_RADIUS) {
-        toast.error(
-          <span
-            style={{
-              fontSize: "12.5px",
-            }}
-          >
-            The curve radius must be at least 3.2 meters!
-          </span>
-        );
-
-        setIsDrawing(false);
-        setCurrentLine(newLine.slice(0, -1)); // Remove last invalid point
-        return;
+        console.warn("Removing last 1 points due to sharp turn!");
+        tempLine = tempLine.slice(0, -3); // Remove last 1 points
+        let g = calculateCurvature(tempLine);
+        let h = g[g.length - 1];
+        console.log(`Last Radius after removing: ${h}`);
       }
     }
 
-    setCurrentLine(newLine);
-    setCurrentLength(computeLineLength(newLine));
+    setCurrentLine(tempLine);
+    setCurrentLength(computeLineLength(tempLine));
   };
 
   // Compute numerical gradient using finite differences
 
   // Handle Mouse Up (Stop Drawing)
+
+  // const handleMouseMove = (e) => {
+  //   if (!isDrawing || !isMouseDown) return;
+
+  //   let newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+  //   let tempLine = [...currentLine, newPoint];
+
+  //   if (tempLine.length >= 3) {
+  //     let radii = calculateCurvature(tempLine);
+  //     let lastRadius = radii[radii.length - 1];
+
+  //     console.log(`Last Radius: ${lastRadius}`);
+
+  //     if (lastRadius < MIN_TURNING_RADIUS) {
+  //       console.warn("⚠️ Sharp turn detected! Adjusting the point...");
+
+  //       // Move the new point further to meet the minimum turning radius
+  //       // console.log("Before Adjust:", last);
+  //       let adjustedPoint = adjustPointForCurvature(
+  //         tempLine,
+  //         MIN_TURNING_RADIUS
+  //       );
+  //       // console.log("After Adjust:", adjustedPoint);
+  //       tempLine[tempLine.length - 1] = adjustedPoint;
+
+  //       // Recalculate curvature after adjustment
+  //       let newRadii = calculateCurvature(tempLine);
+  //       let newLastRadius = newRadii[newRadii.length - 1];
+  //       console.log(`✅ Adjusted Radius: ${newLastRadius}`);
+  //     }
+  //   }
+
+  //   setCurrentLine(tempLine);
+  //   setCurrentLength(computeLineLength(tempLine));
+  // };
+
   const handleMouseUp = () => {
     if (isMouseDown && currentLine.length > 1) {
       setLines((prev) => [...prev, currentLine]);
@@ -245,6 +282,14 @@ export default function MyMap() {
   }, [isDrawing, currentLine]);
 
   //handleFileUpload
+  const fitMapToPolygon = (points) => {
+    if (mapRef.current && points.length > 0) {
+      const bounds = new window.google.maps.LatLngBounds();
+      points.forEach((point) => bounds.extend(point));
+      mapRef.current.fitBounds(bounds); // Use mapRef.current instead of map
+    }
+  };
+
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -252,15 +297,27 @@ export default function MyMap() {
     Papa.parse(file, {
       header: true,
       complete: (results) => {
-        const points = results.data
+        let points = results.data
           .map((row) => ({
             lat: parseFloat(row.latitude),
             lng: parseFloat(row.longitude),
           }))
           .filter((point) => !isNaN(point.lat) && !isNaN(point.lng));
 
-        if (points.length > 0) {
-          setMarkers(points);
+        if (points.length > 2) {
+          // Ensure polygon is closed
+          const firstPoint = points[0];
+          const lastPoint = points[points.length - 1];
+
+          if (
+            firstPoint.lat !== lastPoint.lat ||
+            firstPoint.lng !== lastPoint.lng
+          ) {
+            points.push(firstPoint); // Close the polygon
+          }
+
+          setPolygonCoords(points);
+          fitMapToPolygon(points);
         }
       },
     });
@@ -311,9 +368,18 @@ export default function MyMap() {
             setTimeout(updateBounds, 500); // Ensure bounds update after load
           }}
         >
-          {markers.map((pos, idx) => (
-            <Marker key={idx} position={pos} />
-          ))}
+          {polygonCoords.length > 2 && (
+            <Polygon
+              paths={polygonCoords}
+              options={{
+                fillColor: "rgba(0, 0, 255, 0.3)", // Blue with opacity
+                strokeColor: "blue",
+                strokeWeight: 2,
+                clickable: false, // Allow drawing on top of polygon
+                zIndex: 1, // Lower than polylines
+              }}
+            />
+          )}
 
           {/* Render all drawn lines */}
           {lines.map((path, idx) => (
