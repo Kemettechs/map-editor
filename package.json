@@ -36,6 +36,7 @@
     "@turf/line-intersect": "^7.2.0",
     "dayjs": "^1.11.13",
     "hotkeys-js": "^3.13.9",
+    "mathjs": "^14.3.1",
     "papaparse": "^5.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

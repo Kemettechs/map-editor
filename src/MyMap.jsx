@@ -15,6 +15,8 @@ import {
   IconReload,
   IconUpload,
 } from "@tabler/icons-react";
+import * as math from "mathjs";
+
 const libraries = ["places", "geometry"]; // Define it outside
 // import { computeDistanceBetween } from "spherical-geometry-js";
 
@@ -117,56 +119,49 @@ export default function MyMap() {
     setCurrentLine([{ lat: e.latLng.lat(), lng: e.latLng.lng() }]);
     // setCurrentLength(0);
   };
-  const MIN_TURNING_RADIUS = 3.2; // Minimum turning radius in meters
 
   const calculateCurvature = (path) => {
     if (path.length < 3) return [];
+
+    // Scale latitude and longitude to avoid precision issues
+    const scale = 1e6; // Scale factor
+    const scaledPath = path.map((point) => ({
+      lat: point.lat * scale,
+      lng: point.lng * scale,
+    }));
 
     let curvatures = [];
     let dx = [];
     let dy = [];
 
     // Compute first derivatives using central differences
-    for (let i = 1; i < path.length - 1; i++) {
-      dx.push((path[i + 1].lat - path[i - 1].lat) / 2);
-      dy.push((path[i + 1].lng - path[i - 1].lng) / 2);
+    for (let i = 1; i < scaledPath.length - 1; i++) {
+      dx.push(scaledPath[i + 1].lat - scaledPath[i - 1].lat); // Δx
+      dy.push(scaledPath[i + 1].lng - scaledPath[i - 1].lng); // Δy
     }
 
-    // console.log("dx:", dx);
-    // console.log("dy:", dy);
-
-    // Normalize dx and dy to prevent precision issues
-    for (let i = 0; i < dx.length; i++) {
-      const magnitude = Math.sqrt(dx[i] ** 2 + dy[i] ** 2);
-      if (magnitude > 1e-6) {
-        dx[i] /= magnitude;
-        dy[i] /= magnitude;
-      }
-    }
-
-    // Compute second derivatives
+    // Compute second derivatives using central differences
     let ddx = [];
     let ddy = [];
 
     for (let i = 1; i < dx.length - 1; i++) {
-      ddx.push((dx[i + 1] - dx[i - 1]) / 2);
-      ddy.push((dy[i + 1] - dy[i - 1]) / 2);
+      ddx.push(dx[i + 1] - dx[i - 1]); // Δ²x
+      ddy.push(dy[i + 1] - dy[i - 1]); // Δ²y
     }
-
-    // console.log("ddx:", ddx);
-    // console.log("ddy:", ddy);
 
     // Calculate curvature: κ = |x' y'' - y' x''| / (x'² + y'²)^(3/2)
     for (let i = 0; i < ddx.length; i++) {
-      const numerator = Math.abs(dx[i] * ddy[i] - dy[i] * ddx[i]);
-      const denominator = Math.pow(dx[i] ** 2 + dy[i] ** 2, 1.5);
+      const xPrime = dx[i + 1]; // x'
+      const yPrime = dy[i + 1]; // y'
+      const xDoublePrime = ddx[i]; // x''
+      const yDoublePrime = ddy[i]; // y''
+
+      const numerator = Math.abs(xPrime * yDoublePrime - yPrime * xDoublePrime);
+      const denominator = Math.pow(xPrime ** 2 + yPrime ** 2, 1.5);
 
       const epsilon = 1e-6; // Prevent division by zero
       let curvature = denominator > epsilon ? numerator / denominator : 0;
       let radius = curvature > epsilon ? 1 / curvature : Infinity;
-
-      // console.log(`Curvature at ${i}:`, curvature);
-      // console.log(`Radius at ${i}:`, radius);
 
       curvatures.push(radius);
     }
@@ -174,10 +169,98 @@ export default function MyMap() {
     return curvatures;
   };
 
+  const MIN_TURNING_RADIUS = 3.2; // Minimum turning radius in meters
+  const isValidPath = (point) => {
+    // Example: Ensure the point is within map bounds
+    return (
+      point.lat >= -90 &&
+      point.lat <= 90 &&
+      point.lng >= -180 &&
+      point.lng <= 180
+    );
+  };
+
+  const adjustPoint = (points) => {
+    if (points.length < 3) return points[points.length - 1];
+
+    // Convert lat/lng objects to arrays
+    const toArray = (point) => [point.lat, point.lng];
+    const toLatLng = (arr) => ({ lat: arr[0], lng: arr[1] });
+
+    const p0 = toArray(points[points.length - 3]);
+    const p1 = toArray(points[points.length - 2]);
+    const p2 = toArray(points[points.length - 1]);
+    // console.log(points);
+    // console.log(points[points.length - 3]);
+    // console.log(points[points.length - 2]);
+    // console.log(points[points.length - 1]);
+
+    const v1 = math.subtract(p1, p0);
+    const v2 = math.subtract(p2, p1);
+
+    const mid1 = math.divide(math.add(p0, p1), 2);
+    const mid2 = math.divide(math.add(p1, p2), 2);
+
+    const perp1 = [-v1[1], v1[0]];
+    const perp2 = [-v2[1], v2[0]];
+
+    const dotProduct = math.dot(v1, v2) / (math.norm(v1) * math.norm(v2));
+    const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
+
+    if (Math.abs(angle - Math.PI) < 0.1) return p2;
+    // console.log(v1, v2);
+    const crossProduct = v1[0] * v2[1] - v1[1] * v2[0];
+
+    let centerDir;
+    if (Math.abs(crossProduct) < 1e-10) {
+      centerDir = [v1[1], -v1[0]];
+    } else {
+      const v1Norm = math.divide(v1, math.norm(v1));
+      const v2Norm = math.divide(v2, math.norm(v2));
+      let bisector = math.add(v1Norm, v2Norm);
+
+      if (math.norm(bisector) > 1e-10) {
+        bisector = math.divide(bisector, math.norm(bisector));
+      }
+
+      centerDir = [-bisector[1], bisector[0]];
+      if (math.cross(v1, v2) < 0) centerDir = math.multiply(centerDir, -1);
+    }
+
+    const moveDir = math.multiply(centerDir, 1);
+
+    let minDist = 0;
+    let maxDist = 100000000;
+    let adjustedPoint = p2;
+
+    for (let i = 0; i < 100; i++) {
+      const midDist = (minDist + maxDist) / 2;
+      const testPoint = math.add(p2, math.multiply(moveDir, midDist));
+      console.log(moveDir, midDist, p2);
+
+      console.log(`Test Point: ${testPoint}`);
+      let newPath = [...points.slice(0, -1), toLatLng(testPoint)];
+      let radii = calculateCurvature(newPath);
+      let lastRadius = radii[radii.length - 1];
+
+      console.log(`new Radius: ${lastRadius}`);
+
+      if (lastRadius >= MIN_TURNING_RADIUS) {
+        maxDist = midDist;
+        adjustedPoint = testPoint;
+      } else {
+        minDist = midDist;
+      }
+    }
+
+    return toLatLng(adjustedPoint);
+  };
+
   const handleMouseMove = (e) => {
     if (!isDrawing || !isMouseDown) return;
 
     let newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+
     let tempLine = [...currentLine, newPoint];
 
     if (tempLine.length >= 3) {
@@ -186,57 +269,27 @@ export default function MyMap() {
 
       console.log(`Last Radius: ${lastRadius}`);
 
+      // If the radius is too small, adjust the points
       if (lastRadius < MIN_TURNING_RADIUS) {
-        console.warn("Removing last 1 points due to sharp turn!");
-        tempLine = tempLine.slice(0, -3); // Remove last 1 points
-        let g = calculateCurvature(tempLine);
-        let h = g[g.length - 1];
-        console.log(`Last Radius after removing: ${h}`);
+        console.warn("Adjusting points to smooth the curve...");
+        // console.log(tempLine);
+
+        let newP = adjustPoint(tempLine);
+        // console.log(newP);
+        let newTempLine = [...tempLine];
+        newTempLine[newTempLine.length - 1] = newP;
+        // console.log(newTempLine);
+
+        let w = calculateCurvature(newTempLine);
+        let newR = w[w.length - 1];
+
+        console.log(`newR: ${newR}`);
       }
     }
 
     setCurrentLine(tempLine);
     setCurrentLength(computeLineLength(tempLine));
   };
-
-  // Compute numerical gradient using finite differences
-
-  // Handle Mouse Up (Stop Drawing)
-
-  // const handleMouseMove = (e) => {
-  //   if (!isDrawing || !isMouseDown) return;
-
-  //   let newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-  //   let tempLine = [...currentLine, newPoint];
-
-  //   if (tempLine.length >= 3) {
-  //     let radii = calculateCurvature(tempLine);
-  //     let lastRadius = radii[radii.length - 1];
-
-  //     console.log(`Last Radius: ${lastRadius}`);
-
-  //     if (lastRadius < MIN_TURNING_RADIUS) {
-  //       console.warn("⚠️ Sharp turn detected! Adjusting the point...");
-
-  //       // Move the new point further to meet the minimum turning radius
-  //       // console.log("Before Adjust:", last);
-  //       let adjustedPoint = adjustPointForCurvature(
-  //         tempLine,
-  //         MIN_TURNING_RADIUS
-  //       );
-  //       // console.log("After Adjust:", adjustedPoint);
-  //       tempLine[tempLine.length - 1] = adjustedPoint;
-
-  //       // Recalculate curvature after adjustment
-  //       let newRadii = calculateCurvature(tempLine);
-  //       let newLastRadius = newRadii[newRadii.length - 1];
-  //       console.log(`✅ Adjusted Radius: ${newLastRadius}`);
-  //     }
-  //   }
-
-  //   setCurrentLine(tempLine);
-  //   setCurrentLength(computeLineLength(tempLine));
-  // };
 
   const handleMouseUp = () => {
     if (isMouseDown && currentLine.length > 1) {
@@ -281,7 +334,6 @@ export default function MyMap() {
     };
   }, [isDrawing, currentLine]);
 
-  //handleFileUpload
   const fitMapToPolygon = (points) => {
     if (mapRef.current && points.length > 0) {
       const bounds = new window.google.maps.LatLngBounds();
@@ -289,7 +341,7 @@ export default function MyMap() {
       mapRef.current.fitBounds(bounds); // Use mapRef.current instead of map
     }
   };
-
+  //handleFileUpload
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
