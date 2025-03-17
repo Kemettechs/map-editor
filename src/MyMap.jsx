@@ -7,6 +7,7 @@ import {
   GroundOverlay,
 } from "@react-google-maps/api";
 import Papa from "papaparse";
+import proj4 from "proj4";
 import { ActionIcon, Tooltip } from "@mantine/core";
 import { ToastContainer } from "react-toastify";
 import {
@@ -16,10 +17,41 @@ import {
   IconUpload,
 } from "@tabler/icons-react";
 import * as math from "mathjs";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  LineElement,
+  PointElement,
+  LinearScale,
+  Title,
+  Tooltip as t,
+  Legend,
+} from "chart.js";
+
+ChartJS.register(LineElement, PointElement, LinearScale, Title, t, Legend);
 
 const libraries = ["places", "geometry"]; // Define it outside
 // import { computeDistanceBetween } from "spherical-geometry-js";
+// Define WGS84 and UTM projection strings
+const WGS84 = "EPSG:4326"; // Standard GPS coordinate system
 
+const latlngToCartesian = (lat, lng) => {
+  // Auto-detect UTM zone based on longitude
+  const utmZone = Math.floor((lng + 180) / 6) + 1;
+  const UTM_PROJ = `+proj=utm +zone=${utmZone} +ellps=WGS84 +datum=WGS84 +units=m +no_defs`;
+
+  // Convert LatLng to UTM (meters)
+  const [x, y] = proj4(WGS84, UTM_PROJ, [lng, lat]);
+  return { x, y, utmZone };
+};
+
+const cartesianToLatlng = (x, y, utmZone) => {
+  const UTM_PROJ = `+proj=utm +zone=${utmZone} +ellps=WGS84 +datum=WGS84 +units=m +no_defs`;
+
+  // Convert back to LatLng
+  const [lng, lat] = proj4(UTM_PROJ, WGS84, [x, y]);
+  return { lat, lng };
+};
 // Minimum segment length threshold (3.2 meters)
 const mapContainerStyle = { width: "100%", height: "100vh" };
 const center = { lat: 37.7749, lng: -122.4194 }; // Default to San Francisco
@@ -169,124 +201,98 @@ export default function MyMap() {
     return curvatures;
   };
 
-  const MIN_TURNING_RADIUS = 3.2; // Minimum turning radius in meters
-  const isValidPath = (point) => {
-    // Example: Ensure the point is within map bounds
-    return (
-      point.lat >= -90 &&
-      point.lat <= 90 &&
-      point.lng >= -180 &&
-      point.lng <= 180
-    );
-  };
+  const MIN_TURNING_RADIUS = 3.2;
 
-  const adjustPoint = (points) => {
-    if (points.length < 3) return points[points.length - 1];
+  const smoothThreePoints = (p1, p2, p3, minRadius = MIN_TURNING_RADIUS) => {
+    console.log(p1, p2, p3);
+    p1 = latlngToCartesian(p1.lat, p1.lng);
+    p2 = latlngToCartesian(p2.lat, p2.lng);
+    p3 = latlngToCartesian(p3.lat, p3.lng);
+    console.log(p1, p2, p3);
 
-    // Convert lat/lng objects to arrays
-    const toArray = (point) => [point.lat, point.lng];
-    const toLatLng = (arr) => ({ lat: arr[0], lng: arr[1] });
+    const toArray = (point) => [point.x, point.y]; // Use lat/lng consistently
+    const p1Arr = toArray(p1),
+      p2Arr = toArray(p2),
+      p3Arr = toArray(p3);
 
-    const p0 = toArray(points[points.length - 3]);
-    const p1 = toArray(points[points.length - 2]);
-    const p2 = toArray(points[points.length - 1]);
-    // console.log(points);
-    // console.log(points[points.length - 3]);
-    // console.log(points[points.length - 2]);
-    // console.log(points[points.length - 1]);
+    const v1 = [p1Arr[0] - p2Arr[0], p1Arr[1] - p2Arr[1]];
+    const v2 = [p3Arr[0] - p2Arr[0], p3Arr[1] - p2Arr[1]];
 
-    const v1 = math.subtract(p1, p0);
-    const v2 = math.subtract(p2, p1);
+    const dotProduct = v1[0] * v2[0] + v1[1] * v2[1];
+    const normV1 = Math.sqrt(v1[0] ** 2 + v1[1] ** 2);
+    const normV2 = Math.sqrt(v2[0] ** 2 + v2[1] ** 2);
 
-    const mid1 = math.divide(math.add(p0, p1), 2);
-    const mid2 = math.divide(math.add(p1, p2), 2);
+    // if (normV1 === 0 || normV2 === 0) return [p1, p2, p3];
 
-    const perp1 = [-v1[1], v1[0]];
-    const perp2 = [-v2[1], v2[0]];
+    const cosAngle = dotProduct / (normV1 * normV2);
+    // if (cosAngle < -1 || cosAngle > 1) return [p1, p2, p3];
 
-    const dotProduct = math.dot(v1, v2) / (math.norm(v1) * math.norm(v2));
-    const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
+    const angle = Math.acos(cosAngle);
+    const halfAngle = angle / 2;
+    const sinHalfAngle = Math.sin(halfAngle);
+    // if (sinHalfAngle === 0) return [p1, p2, p3];
 
-    if (Math.abs(angle - Math.PI) < 0.1) return p2;
-    // console.log(v1, v2);
-    const crossProduct = v1[0] * v2[1] - v1[1] * v2[0];
+    const distance = minRadius / sinHalfAngle;
 
-    let centerDir;
-    if (Math.abs(crossProduct) < 1e-10) {
-      centerDir = [v1[1], -v1[0]];
-    } else {
-      const v1Norm = math.divide(v1, math.norm(v1));
-      const v2Norm = math.divide(v2, math.norm(v2));
-      let bisector = math.add(v1Norm, v2Norm);
+    const bisector = [
+      (v1[0] / normV1 + v2[0] / normV2) / 2,
+      (v1[1] / normV1 + v2[1] / normV2) / 2,
+    ];
+    const normBisector = Math.sqrt(bisector[0] ** 2 + bisector[1] ** 2);
+    // if (normBisector === 0) return [p1, p2, p3];
 
-      if (math.norm(bisector) > 1e-10) {
-        bisector = math.divide(bisector, math.norm(bisector));
-      }
+    let adjustedP2 = {
+      x: p2.x - (bisector[0] / normBisector) * distance,
+      y: p2.y - (bisector[1] / normBisector) * distance,
+    };
+    // console.log(cartesianToLatlng(adjustedP2.x, adjustedP2.y, 10));
+    adjustedP2 = cartesianToLatlng(adjustedP2.x, adjustedP2.y, p1.utmZone);
+    console.log(adjustedP2);
 
-      centerDir = [-bisector[1], bisector[0]];
-      if (math.cross(v1, v2) < 0) centerDir = math.multiply(centerDir, -1);
-    }
-
-    const moveDir = math.multiply(centerDir, 1);
-
-    let minDist = 0;
-    let maxDist = 100000000;
-    let adjustedPoint = p2;
-
-    for (let i = 0; i < 100; i++) {
-      const midDist = (minDist + maxDist) / 2;
-      const testPoint = math.add(p2, math.multiply(moveDir, midDist));
-      console.log(moveDir, midDist, p2);
-
-      console.log(`Test Point: ${testPoint}`);
-      let newPath = [...points.slice(0, -1), toLatLng(testPoint)];
-      let radii = calculateCurvature(newPath);
-      let lastRadius = radii[radii.length - 1];
-
-      console.log(`new Radius: ${lastRadius}`);
-
-      if (lastRadius >= MIN_TURNING_RADIUS) {
-        maxDist = midDist;
-        adjustedPoint = testPoint;
-      } else {
-        minDist = midDist;
-      }
-    }
-
-    return toLatLng(adjustedPoint);
+    return [p1, adjustedP2, p3];
   };
 
   const handleMouseMove = (e) => {
     if (!isDrawing || !isMouseDown) return;
 
     let newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-
     let tempLine = [...currentLine, newPoint];
+    // Remove consecutive duplicate points
+    tempLine = tempLine.filter((point, index, arr) => {
+      return (
+        index === 0 ||
+        !(point.lat === arr[index - 1].lat && point.lng === arr[index - 1].lng)
+      );
+    });
 
     if (tempLine.length >= 3) {
       let radii = calculateCurvature(tempLine);
       let lastRadius = radii[radii.length - 1];
 
       console.log(`Last Radius: ${lastRadius}`);
+      console.log(tempLine);
 
-      // If the radius is too small, adjust the points
       if (lastRadius < MIN_TURNING_RADIUS) {
-        console.warn("Adjusting points to smooth the curve...");
+        let smoothedPoints = smoothThreePoints(
+          tempLine[tempLine.length - 3],
+          tempLine[tempLine.length - 2],
+          tempLine[tempLine.length - 1],
+          MIN_TURNING_RADIUS
+        );
         // console.log(tempLine);
 
-        let newP = adjustPoint(tempLine);
-        // console.log(newP);
-        let newTempLine = [...tempLine];
-        newTempLine[newTempLine.length - 1] = newP;
-        // console.log(newTempLine);
+        console.log("Adjusted Points:", smoothedPoints);
+        let newPath = [...tempLine];
+        newPath = [tempLine[0], tempLine[1], smoothedPoints[1]];
 
-        let w = calculateCurvature(newTempLine);
-        let newR = w[w.length - 1];
-
-        console.log(`newR: ${newR}`);
+        // newPath.splice(newPath.length - 2, 1, smoothedPoints[1]); // Insert valid lat/lng
+        console.log(newPath);
+        let radii = calculateCurvature(newPath);
+        let newLastRadius = radii[radii.length - 1];
+        tempLine = newPath;
+        console.log(`new Radius: ${newLastRadius}`);
       }
     }
-
     setCurrentLine(tempLine);
     setCurrentLength(computeLineLength(tempLine));
   };
