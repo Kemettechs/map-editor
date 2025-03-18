@@ -203,6 +203,89 @@ export default function MyMap() {
 
   const MIN_TURNING_RADIUS = 3.2;
 
+  const smoothWithArc = (p1, p2, p3, minRadius = 3.2, numPoints = 20) => {
+    p1 = latlngToCartesian(p1.lat, p1.lng);
+    p2 = latlngToCartesian(p2.lat, p2.lng);
+    p3 = latlngToCartesian(p3.lat, p3.lng);
+    // Vectors from p2 to p1 and p2 to p3
+    const v1 = { x: p1.x - p2.x, y: p1.y - p2.y };
+    const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
+
+    // Normalize vectors
+    const normV1 = Math.sqrt(v1.x ** 2 + v1.y ** 2);
+    const normV2 = Math.sqrt(v2.x ** 2 + v2.y ** 2);
+    const v1Normalized = { x: v1.x / normV1, y: v1.y / normV1 };
+    const v2Normalized = { x: v2.x / normV2, y: v2.y / normV2 };
+
+    // Calculate angle between vectors (in radians)
+    const angle = Math.acos(
+      v1Normalized.x * v2Normalized.x + v1Normalized.y * v2Normalized.y
+    );
+
+    // Skip smoothing for near-straight angles
+    // if (Math.abs(angle) < 1e-9 || Math.abs(angle - Math.PI) < 1e-9) {
+    //   return [p1, p2, p3];
+    // }
+
+    // Calculate tangent length and check segment lengths
+    const halfAngle = angle / 2;
+    const tangentLength = minRadius / Math.tan(halfAngle);
+    // if (normV1 < tangentLength || normV2 < tangentLength) {
+    //   return [p1, p2, p3];
+    // }
+
+    // Correct bisector direction (outward from the corner)
+    const bisector = {
+      x: v1Normalized.x - v2Normalized.x,
+      y: v1Normalized.y - v2Normalized.y,
+    };
+    const bisectorNorm = Math.sqrt(bisector.x ** 2 + bisector.y ** 2);
+    const bisectorNormalized = {
+      x: bisector.x / bisectorNorm,
+      y: bisector.y / bisectorNorm,
+    };
+
+    // Calculate arc center
+    const center = {
+      x: p2.x + bisectorNormalized.x * (minRadius / Math.sin(halfAngle)),
+      y: p2.y + bisectorNormalized.y * (minRadius / Math.sin(halfAngle)),
+    };
+
+    // Calculate start/end points of the arc
+    const startPoint = {
+      x: p2.x + v1Normalized.x * tangentLength,
+      y: p2.y + v1Normalized.y * tangentLength,
+    };
+    const endPoint = {
+      x: p2.x + v2Normalized.x * tangentLength,
+      y: p2.y + v2Normalized.y * tangentLength,
+    };
+
+    // Generate points along the arc
+    const thetaStart = Math.atan2(
+      startPoint.y - center.y,
+      startPoint.x - center.x
+    );
+    const thetaEnd = Math.atan2(endPoint.y - center.y, endPoint.x - center.x);
+    const theta = Array.from(
+      { length: numPoints },
+      (_, i) => thetaStart + (thetaEnd - thetaStart) * (i / (numPoints - 1))
+    );
+
+    let arcPoints = theta.map((t) => ({
+      x: center.x + minRadius * Math.cos(t),
+      y: center.y + minRadius * Math.sin(t),
+    }));
+    console.log(arcPoints);
+
+    arcPoints = arcPoints.map((point) => {
+      return cartesianToLatlng(point.x, point.y, p1.utmZone);
+    });
+    console.log(arcPoints);
+
+    return arcPoints;
+  };
+
   const smoothThreePoints = (p1, p2, p3, minRadius = MIN_TURNING_RADIUS) => {
     console.log(p1, p2, p3);
     p1 = latlngToCartesian(p1.lat, p1.lng);
@@ -251,50 +334,65 @@ export default function MyMap() {
 
     return [p1, adjustedP2, p3];
   };
-
+  let pointsAdj = 1000000;
   const handleMouseMove = (e) => {
     if (!isDrawing || !isMouseDown) return;
 
     let newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    let tempLine = [...currentLine, newPoint];
-    // Remove consecutive duplicate points
-    tempLine = tempLine.filter((point, index, arr) => {
-      return (
-        index === 0 ||
-        !(point.lat === arr[index - 1].lat && point.lng === arr[index - 1].lng)
-      );
-    });
+    let lastPoint = currentLine[currentLine.length - 1];
+    let d = computeLineLength([lastPoint, newPoint]);
+    console.log(d);
+    if (d > 2) {
+      let tempLine = [...currentLine, newPoint];
 
-    if (tempLine.length >= 3) {
-      let radii = calculateCurvature(tempLine);
-      let lastRadius = radii[radii.length - 1];
-
-      console.log(`Last Radius: ${lastRadius}`);
-      console.log(tempLine);
-
-      if (lastRadius < MIN_TURNING_RADIUS) {
-        let smoothedPoints = smoothThreePoints(
-          tempLine[tempLine.length - 3],
-          tempLine[tempLine.length - 2],
-          tempLine[tempLine.length - 1],
-          MIN_TURNING_RADIUS
+      pointsAdj = pointsAdj + 1;
+      // Remove consecutive duplicate points
+      tempLine = tempLine.filter((point, index, arr) => {
+        return (
+          index === 0 ||
+          !(
+            point.lat === arr[index - 1].lat && point.lng === arr[index - 1].lng
+          )
         );
-        // console.log(tempLine);
+      });
 
-        console.log("Adjusted Points:", smoothedPoints);
-        let newPath = [...tempLine];
-        newPath = [tempLine[0], tempLine[1], smoothedPoints[1]];
+      if (tempLine.length >= 3) {
+        let radii = calculateCurvature(tempLine);
+        let lastRadius = radii[radii.length - 1];
 
-        // newPath.splice(newPath.length - 2, 1, smoothedPoints[1]); // Insert valid lat/lng
-        console.log(newPath);
-        let radii = calculateCurvature(newPath);
-        let newLastRadius = radii[radii.length - 1];
-        tempLine = newPath;
-        console.log(`new Radius: ${newLastRadius}`);
+        console.log(`Last Radius: ${lastRadius}`);
+        console.log(tempLine);
+
+        if (lastRadius < MIN_TURNING_RADIUS) {
+          let smoothedPoints = smoothWithArc(
+            tempLine[tempLine.length - 3],
+            tempLine[tempLine.length - 2],
+            tempLine[tempLine.length - 1],
+            MIN_TURNING_RADIUS,
+            50
+          );
+          // console.log(tempLine);
+
+          console.log("Adjusted Points:", smoothedPoints);
+          let newPath = [...tempLine];
+          // newPath = [
+          //   tempLine[0],
+          //   smoothedPoints[1],
+          //   tempLine[tempLine.length - 1],
+          // ];
+          pointsAdj = 0;
+          newPath.splice(newPath.length - 2, 1, ...smoothedPoints); // Insert valid lat/lng
+          console.log(newPath);
+          let radii = calculateCurvature(newPath);
+          let newLastRadius = radii[radii.length - 1];
+          tempLine = newPath;
+          console.log(`new Radius: ${newLastRadius}`);
+        }
       }
+
+      setCurrentLine(tempLine);
+      setCurrentLength(computeLineLength(tempLine));
     }
-    setCurrentLine(tempLine);
-    setCurrentLength(computeLineLength(tempLine));
   };
 
   const handleMouseUp = () => {
