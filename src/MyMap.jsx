@@ -213,7 +213,7 @@ export default function MyMap() {
    * @param {Number} maxDeviation - Maximum allowed deviation from projected straight line (in meters)
    * @returns {Object} - Adjusted p3 point with x,y coordinates
    */
-  function smoothPoint(p1, p2, p3, pointDistance = 0.3, maxDeviation = 0.028) {
+  function smoothPoint(p1, p2, p3, pointDistance = 0.3, maxDeviation = 0.105, minDeviation = 0.01, deviationAmplifier = 2.5, perpendicularOffset = 1) {
 
     console.log('Input points:', { p1, p2, p3 });
     console.log('Constraints:', { pointDistance, maxDeviation });
@@ -221,103 +221,114 @@ export default function MyMap() {
     p1 = latlngToCartesian(p1.lat, p1.lng);
     p2 = latlngToCartesian(p2.lat, p2.lng);
     p3 = latlngToCartesian(p3.lat, p3.lng);
-
+    console.log('Input points:', { p1, p2, p3 });
+    console.log('Constraints:', { pointDistance, maxDeviation });
+  
     // Calculate the direction vector from p1 to p2
-    const v12 = {
-      x: p2.x - p1.x,
-      y: p2.y - p1.y
-    };
+    const v12 = { x: p2.x - p1.x, y: p2.y - p1.y };
     console.log('Direction vector p1->p2:', v12);
-
+  
     // Normalize the direction vector
     const v12Length = Math.sqrt(v12.x * v12.x + v12.y * v12.y);
     console.log('Distance p1->p2:', v12Length);
-
-    const v12Unit = {
-      x: v12.x / v12Length,
-      y: v12.y / v12Length
-    };
+    const v12Unit = { x: v12.x / v12Length, y: v12.y / v12Length };
     console.log('Unit direction p1->p2:', v12Unit);
-
+  
     // Project where p3 should be if continuing straight from p1->p2
-    const projectedP3 = {
-      x: p2.x + v12Unit.x * pointDistance,
-      y: p2.y + v12Unit.y * pointDistance
-    };
+    const projectedP3 = { x: p2.x + v12Unit.x * pointDistance, y: p2.y + v12Unit.y * pointDistance };
     console.log('Projected p3 (straight line):', projectedP3);
-
+  
     // Calculate the current deviation from the projected path
-    const deviationVector = {
-      x: p3.x - projectedP3.x,
-      y: p3.y - projectedP3.y
-    };
-    
+    const deviationVector = { x: p3.x - projectedP3.x, y: p3.y - projectedP3.y };
     const deviationLength = Math.sqrt(
-      deviationVector.x * deviationVector.x + 
-      deviationVector.y * deviationVector.y
+      deviationVector.x * deviationVector.x + deviationVector.y * deviationVector.y
     );
     console.log('Deviation from straight line:', deviationLength);
-
+  
     // If the deviation is within constraints, return the original point
     if (deviationLength <= maxDeviation) {
       console.log('Deviation within limits, returning original p3');
-
+      // Force the point to move to the maximum deviation in the same direction
+      // This is the key change - we're always pushing to the maximum deviation
+      if (deviationLength > 0) {
+        const deviationUnit = { 
+          x: deviationVector.x / deviationLength, 
+          y: deviationVector.y / deviationLength 
+        };
+        const forcedP3 = {
+          x: projectedP3.x + deviationUnit.x * maxDeviation,
+          y: projectedP3.y + deviationUnit.y * maxDeviation
+        };
+        console.log('Forcing deviation to maximum:', forcedP3);
+        
+        // Ensure the distance from p2 to forcedP3 is still pointDistance
+        const currentDistance = Math.sqrt(
+          Math.pow(forcedP3.x - p2.x, 2) + Math.pow(forcedP3.y - p2.y, 2)
+        );
+        
+        if (Math.abs(currentDistance - pointDistance) > 0.001) {
+          console.log('Adjusting distance to maintain pointDistance...');
+          // Create a vector from p2 to forcedP3
+          const adjustedDirection = { x: forcedP3.x - p2.x, y: forcedP3.y - p2.y };
+          // Normalize and scale to the correct distance
+          const adjustedLength = Math.sqrt(
+            adjustedDirection.x * adjustedDirection.x + adjustedDirection.y * adjustedDirection.y
+          );
+          const finalP3 = {
+            x: p2.x + (adjustedDirection.x / adjustedLength) * pointDistance,
+            y: p2.y + (adjustedDirection.y / adjustedLength) * pointDistance
+          };
+          
+          // Calculate how different the result is from the original
+          const changeX = finalP3.x - p3.x;
+          const changeY = finalP3.y - p3.y;
+          console.log('Change from original:', { changeX, changeY, distance: Math.sqrt(changeX*changeX + changeY*changeY) });
+          
+          return cartesianToLatlng(finalP3.x, finalP3.y, p1.utmZone);
+        }
+        
+        return cartesianToLatlng(forcedP3.x, forcedP3.y, p1.utmZone);
+      }
       return cartesianToLatlng(p3.x, p3.y, p1.utmZone);
     }
+  
     console.log('Deviation exceeds maximum, adjusting point...');
-
+    
     // Otherwise, limit the deviation to the maximum allowed
     // First, normalize the deviation vector
-    const deviationUnit = {
-      x: deviationVector.x / deviationLength,
-      y: deviationVector.y / deviationLength
-    };
+    const deviationUnit = { x: deviationVector.x / deviationLength, y: deviationVector.y / deviationLength };
     
     // Create a point at the maximum allowed deviation
-    const adjustedP3 = {
-      x: projectedP3.x + deviationUnit.x * maxDeviation,
-      y: projectedP3.y + deviationUnit.y * maxDeviation
-    };
+    const adjustedP3 = { x: projectedP3.x + deviationUnit.x * maxDeviation, y: projectedP3.y + deviationUnit.y * maxDeviation };
     console.log('Initial adjusted p3:', adjustedP3);
-
+  
     // Ensure the distance from p2 to adjustedP3 is still pointDistance
     const currentDistance = Math.sqrt(
-      Math.pow(adjustedP3.x - p2.x, 2) + 
-      Math.pow(adjustedP3.y - p2.y, 2)
+      Math.pow(adjustedP3.x - p2.x, 2) + Math.pow(adjustedP3.y - p2.y, 2)
     );
     console.log('Distance from p2 to adjusted p3:', currentDistance);
+  
     let finalP3 = { ...adjustedP3 };
-
     if (Math.abs(currentDistance - pointDistance) > 0.001) {
       console.log('Adjusting distance to maintain pointDistance...');
       // Create a vector from p2 to adjustedP3
-      const adjustedDirection = {
-        x: adjustedP3.x - p2.x,
-        y: adjustedP3.y - p2.y
-      };
-      
+      const adjustedDirection = { x: adjustedP3.x - p2.x, y: adjustedP3.y - p2.y };
       // Normalize and scale to the correct distance
       const adjustedLength = Math.sqrt(
-        adjustedDirection.x * adjustedDirection.x + 
-        adjustedDirection.y * adjustedDirection.y
+        adjustedDirection.x * adjustedDirection.x + adjustedDirection.y * adjustedDirection.y
       );
-      
       finalP3 = {
         x: p2.x + (adjustedDirection.x / adjustedLength) * pointDistance,
         y: p2.y + (adjustedDirection.y / adjustedLength) * pointDistance
       };
       console.log('Final adjusted p3:', finalP3);
     }
-    
+  
     // Calculate how different the result is from the original
     const changeX = finalP3.x - p3.x;
     const changeY = finalP3.y - p3.y;
-    console.log('Change from original:', { 
-      changeX, 
-      changeY, 
-      distance: Math.sqrt(changeX*changeX + changeY*changeY) 
-    });
-      
+    console.log('Change from original:', { changeX, changeY, distance: Math.sqrt(changeX*changeX + changeY*changeY) });
+              
     return cartesianToLatlng(finalP3.x, finalP3.y, p1.utmZone);
   }
 
