@@ -202,6 +202,124 @@ export default function MyMap() {
   };
 
   const MIN_TURNING_RADIUS = 3.2;
+  /**
+   * Smooths the last point in a three-point sequence to ensure a smooth curve
+   * with limited curvature.
+   * 
+   * @param {Object} p1 - First point with x,y coordinates
+   * @param {Object} p2 - Second point with x,y coordinates
+   * @param {Object} p3 - Third point with x,y coordinates (the one to be adjusted)
+   * @param {Number} pointDistance - Distance between consecutive points (in meters)
+   * @param {Number} maxDeviation - Maximum allowed deviation from projected straight line (in meters)
+   * @returns {Object} - Adjusted p3 point with x,y coordinates
+   */
+  function smoothPoint(p1, p2, p3, pointDistance = 0.3, maxDeviation = 0.028) {
+
+    console.log('Input points:', { p1, p2, p3 });
+    console.log('Constraints:', { pointDistance, maxDeviation });
+  
+    p1 = latlngToCartesian(p1.lat, p1.lng);
+    p2 = latlngToCartesian(p2.lat, p2.lng);
+    p3 = latlngToCartesian(p3.lat, p3.lng);
+
+    // Calculate the direction vector from p1 to p2
+    const v12 = {
+      x: p2.x - p1.x,
+      y: p2.y - p1.y
+    };
+    console.log('Direction vector p1->p2:', v12);
+
+    // Normalize the direction vector
+    const v12Length = Math.sqrt(v12.x * v12.x + v12.y * v12.y);
+    console.log('Distance p1->p2:', v12Length);
+
+    const v12Unit = {
+      x: v12.x / v12Length,
+      y: v12.y / v12Length
+    };
+    console.log('Unit direction p1->p2:', v12Unit);
+
+    // Project where p3 should be if continuing straight from p1->p2
+    const projectedP3 = {
+      x: p2.x + v12Unit.x * pointDistance,
+      y: p2.y + v12Unit.y * pointDistance
+    };
+    console.log('Projected p3 (straight line):', projectedP3);
+
+    // Calculate the current deviation from the projected path
+    const deviationVector = {
+      x: p3.x - projectedP3.x,
+      y: p3.y - projectedP3.y
+    };
+    
+    const deviationLength = Math.sqrt(
+      deviationVector.x * deviationVector.x + 
+      deviationVector.y * deviationVector.y
+    );
+    console.log('Deviation from straight line:', deviationLength);
+
+    // If the deviation is within constraints, return the original point
+    if (deviationLength <= maxDeviation) {
+      console.log('Deviation within limits, returning original p3');
+
+      return cartesianToLatlng(p3.x, p3.y, p1.utmZone);
+    }
+    console.log('Deviation exceeds maximum, adjusting point...');
+
+    // Otherwise, limit the deviation to the maximum allowed
+    // First, normalize the deviation vector
+    const deviationUnit = {
+      x: deviationVector.x / deviationLength,
+      y: deviationVector.y / deviationLength
+    };
+    
+    // Create a point at the maximum allowed deviation
+    const adjustedP3 = {
+      x: projectedP3.x + deviationUnit.x * maxDeviation,
+      y: projectedP3.y + deviationUnit.y * maxDeviation
+    };
+    console.log('Initial adjusted p3:', adjustedP3);
+
+    // Ensure the distance from p2 to adjustedP3 is still pointDistance
+    const currentDistance = Math.sqrt(
+      Math.pow(adjustedP3.x - p2.x, 2) + 
+      Math.pow(adjustedP3.y - p2.y, 2)
+    );
+    console.log('Distance from p2 to adjusted p3:', currentDistance);
+    let finalP3 = { ...adjustedP3 };
+
+    if (Math.abs(currentDistance - pointDistance) > 0.001) {
+      console.log('Adjusting distance to maintain pointDistance...');
+      // Create a vector from p2 to adjustedP3
+      const adjustedDirection = {
+        x: adjustedP3.x - p2.x,
+        y: adjustedP3.y - p2.y
+      };
+      
+      // Normalize and scale to the correct distance
+      const adjustedLength = Math.sqrt(
+        adjustedDirection.x * adjustedDirection.x + 
+        adjustedDirection.y * adjustedDirection.y
+      );
+      
+      finalP3 = {
+        x: p2.x + (adjustedDirection.x / adjustedLength) * pointDistance,
+        y: p2.y + (adjustedDirection.y / adjustedLength) * pointDistance
+      };
+      console.log('Final adjusted p3:', finalP3);
+    }
+    
+    // Calculate how different the result is from the original
+    const changeX = finalP3.x - p3.x;
+    const changeY = finalP3.y - p3.y;
+    console.log('Change from original:', { 
+      changeX, 
+      changeY, 
+      distance: Math.sqrt(changeX*changeX + changeY*changeY) 
+    });
+      
+    return cartesianToLatlng(finalP3.x, finalP3.y, p1.utmZone);
+  }
 
   const smoothWithArc = (p1, p2, p3, minRadius = 3.2, numPoints = 20) => {
     p1 = latlngToCartesian(p1.lat, p1.lng);
@@ -217,11 +335,8 @@ export default function MyMap() {
     const v1Normalized = { x: v1.x / normV1, y: v1.y / normV1 };
     const v2Normalized = { x: v2.x / normV2, y: v2.y / normV2 };
 
-    // Calculate angle between vectors (in radians)
-    const angle = Math.acos(
-      v1Normalized.x * v2Normalized.x + v1Normalized.y * v2Normalized.y
-    );
-
+    const crossProduct = v1Normalized.x * v2Normalized.y - v1Normalized.y * v2Normalized.x;
+    const angle = Math.atan2(crossProduct, v1Normalized.x * v2Normalized.x + v1Normalized.y * v2Normalized.y);
     // Skip smoothing for near-straight angles
     // if (Math.abs(angle) < 1e-9 || Math.abs(angle - Math.PI) < 1e-9) {
     //   return [p1, p2, p3];
@@ -340,21 +455,11 @@ export default function MyMap() {
 
     let newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
     let lastPoint = currentLine[currentLine.length - 1];
-    let d = computeLineLength([lastPoint, newPoint]);
-    console.log(d);
-    if (d > 2) {
+    let distanceBetweenPoints = computeLineLength([lastPoint, newPoint]) / 3.281 ; // Convert to meters
+    console.log(distanceBetweenPoints)
+    // console.log(d);
+    if (distanceBetweenPoints > 0.3) {
       let tempLine = [...currentLine, newPoint];
-
-      pointsAdj = pointsAdj + 1;
-      // Remove consecutive duplicate points
-      tempLine = tempLine.filter((point, index, arr) => {
-        return (
-          index === 0 ||
-          !(
-            point.lat === arr[index - 1].lat && point.lng === arr[index - 1].lng
-          )
-        );
-      });
 
       if (tempLine.length >= 3) {
         let radii = calculateCurvature(tempLine);
@@ -364,24 +469,30 @@ export default function MyMap() {
         console.log(tempLine);
 
         if (lastRadius < MIN_TURNING_RADIUS) {
-          let smoothedPoints = smoothWithArc(
+          // let smoothedPoints = smoothWithArc(
+          //   tempLine[tempLine.length - 3],
+          //   tempLine[tempLine.length - 2],
+          //   tempLine[tempLine.length - 1],
+          //   MIN_TURNING_RADIUS,
+          //   50
+          // );
+          let smoothedP3 = smoothPoint(
             tempLine[tempLine.length - 3],
             tempLine[tempLine.length - 2],
-            tempLine[tempLine.length - 1],
-            MIN_TURNING_RADIUS,
-            50
+            tempLine[tempLine.length - 1]
           );
           // console.log(tempLine);
 
-          console.log("Adjusted Points:", smoothedPoints);
+          console.log("Adjusted Points:", smoothedP3);
+          tempLine[tempLine.length - 1] = smoothedP3;
           let newPath = [...tempLine];
+          // let newPath = [...tempLine];
           // newPath = [
           //   tempLine[0],
           //   smoothedPoints[1],
           //   tempLine[tempLine.length - 1],
           // ];
-          pointsAdj = 0;
-          newPath.splice(newPath.length - 2, 1, ...smoothedPoints); // Insert valid lat/lng
+          // newPath.splice(newPath.length - 2, 1, ...smoothedPoints); // Insert valid lat/lng
           console.log(newPath);
           let radii = calculateCurvature(newPath);
           let newLastRadius = radii[radii.length - 1];
