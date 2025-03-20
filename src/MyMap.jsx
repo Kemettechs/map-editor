@@ -201,7 +201,7 @@ export default function MyMap() {
     return curvatures;
   };
 
-  const MIN_TURNING_RADIUS = 3.2;
+  const MIN_TURNING_RADIUS = 5;
 
 /**
  * Creates a smooth curve using Centripetal Catmull-Rom spline interpolation
@@ -982,7 +982,7 @@ function calculateBezierPoint(t, p0, p1, p2, p3) {
     let distanceBetweenPoints = computeLineLength([lastPoint, newPoint]) / 3.281 ; // Convert to meters
     console.log(distanceBetweenPoints)
     // console.log(d);
-    if (distanceBetweenPoints > 0.5) {
+    if (distanceBetweenPoints > 5) {
       let tempLine = [...currentLine, newPoint];
 
       if (tempLine.length >= 3) {
@@ -1003,7 +1003,7 @@ function calculateBezierPoint(t, p0, p1, p2, p3) {
           // convert tempLine to cartesian. 
           let tempLineCartesian = tempLine.map((point) => latlngToCartesian(point.lat, point.lng));
 
-          tempLineCartesian = createSmoothCurve(tempLineCartesian);
+          tempLineCartesian = createSmoothBezierCurve(tempLineCartesian);
           // filter points that has Nan values
           tempLineCartesian = tempLineCartesian.filter((point) => !isNaN(point.x) && !isNaN(point.y));
           // convert back to latlng
