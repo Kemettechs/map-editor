@@ -201,7 +201,7 @@ export default function MyMap() {
     return curvatures;
   };
 
-  const MIN_TURNING_RADIUS = 3.2;
+  const MIN_TURNING_RADIUS = 20;
   /**
    * Smooths the last point in a three-point sequence to ensure a smooth curve
    * with limited curvature.
@@ -213,7 +213,7 @@ export default function MyMap() {
    * @param {Number} maxDeviation - Maximum allowed deviation from projected straight line (in meters)
    * @returns {Object} - Adjusted p3 point with x,y coordinates
    */
-  function smoothPoint(p1, p2, p3, pointDistance = 0.3, maxDeviation = 0.105, minDeviation = 0.01, deviationAmplifier = 2.5, perpendicularOffset = 1) {
+  function smoothPoint(p1, p2, p3, pointDistance = 0.3, maxDeviation = 0.505, minDeviation = 0.01, deviationAmplifier = 2.5, perpendicularOffset = 1) {
 
     console.log('Input points:', { p1, p2, p3 });
     console.log('Constraints:', { pointDistance, maxDeviation });
