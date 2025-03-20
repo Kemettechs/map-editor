@@ -201,7 +201,520 @@ export default function MyMap() {
     return curvatures;
   };
 
-  const MIN_TURNING_RADIUS = 20;
+  const MIN_TURNING_RADIUS = 3.2;
+
+/**
+ * Creates a smooth curve using Centripetal Catmull-Rom spline interpolation
+ * @param {Array} points - Array of {x, y} coordinates
+ * @param {number} segments - Number of segments to generate per curve section
+ * @param {number} alpha - Parameter controlling curve tightness (0.5 for centripetal, 0 for uniform, 1 for chordal)
+ * @returns {Array} Array of {x, y} points representing the smooth curve
+ */
+function createCentripetalCatmullRomSpline(points, segments = 20, alpha = 0.5) {
+  if (!points || points.length < 2) {
+    return points ? [...points] : [];
+  }
+
+  const result = [];
+  const n = points.length;
+  
+  // Helper function to calculate parameter t based on points and alpha value
+  function getT(t, p0, p1, alpha) {
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    return t + Math.pow(distance, alpha);
+  }
+  
+  // For each segment of the curve
+  for (let i = 0; i < n - 1; i++) {
+    // We need 4 points for Catmull-Rom: 
+    // two actual points and two for tangent calculation
+    const p0 = i > 0 ? points[i - 1] : points[0]; // First control point
+    const p1 = points[i];                         // Start point
+    const p2 = points[i + 1];                     // End point
+    const p3 = i < n - 2 ? points[i + 2] : p2;    // Last control point
+    
+    // Calculate parametric values using centripetal parameterization
+    let t0 = 0;
+    let t1 = getT(t0, p0, p1, alpha);
+    let t2 = getT(t1, p1, p2, alpha);
+    let t3 = getT(t2, p2, p3, alpha);
+    
+    // Normalize t1 and t2 to [0, 1] for the interpolation
+    t1 = (t1 - t0) / (t3 - t0);
+    t2 = (t2 - t0) / (t3 - t0);
+    
+    // Add the first point (except for the first segment where we've already added it)
+    if (i === 0) {
+      result.push({ x: p1.x, y: p1.y });
+    }
+    
+    // Generate points along the curve segment
+    for (let j = 1; j <= segments; j++) {
+      const t = j / segments;
+      
+      // Scale t to the [t1, t2] range
+      const scaledT = t1 + t * (t2 - t1);
+      
+      // Use the standard Catmull-Rom formula
+      const point = interpolateCatmullRom(p0, p1, p2, p3, scaledT, t0, t1, t2, t3);
+      result.push(point);
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Interpolates a point on a Catmull-Rom curve using the given parameters
+ * @param {Object} p0 - First control point
+ * @param {Object} p1 - Start point
+ * @param {Object} p2 - End point
+ * @param {Object} p3 - Last control point
+ * @param {number} t - Parameter value (0-1)
+ * @param {number} t0 - Parameterization value for p0
+ * @param {number} t1 - Parameterization value for p1
+ * @param {number} t2 - Parameterization value for p2
+ * @param {number} t3 - Parameterization value for p3
+ * @returns {Object} Interpolated point {x, y}
+ */
+function interpolateCatmullRom(p0, p1, p2, p3, t, t0, t1, t2, t3) {
+  // Calculate basis functions
+  function hermite(p0, p1, m0, m1, t) {
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const h00 = 2 * t3 - 3 * t2 + 1;
+    const h10 = t3 - 2 * t2 + t;
+    const h01 = -2 * t3 + 3 * t2;
+    const h11 = t3 - t2;
+    
+    return {
+      x: h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x,
+      y: h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y
+    };
+  }
+  
+  // Calculate tangents for centripetal Catmull-Rom
+  const m0 = {
+    x: (t2 - t0) * ((p1.x - p0.x) / (t1 - t0) - (p2.x - p0.x) / (t2 - t0) + (p2.x - p1.x) / (t2 - t1)),
+    y: (t2 - t0) * ((p1.y - p0.y) / (t1 - t0) - (p2.y - p0.y) / (t2 - t0) + (p2.y - p1.y) / (t2 - t1))
+  };
+  
+  const m1 = {
+    x: (t2 - t0) * ((p1.x - p0.x) / (t1 - t0) - (p3.x - p1.x) / (t3 - t1) + (p2.x - p1.x) / (t2 - t1)),
+    y: (t2 - t0) * ((p1.y - p0.y) / (t1 - t0) - (p3.y - p1.y) / (t3 - t1) + (p2.y - p1.y) / (t2 - t1))
+  };
+  
+  // Adjust tangent magnitudes for parameterization
+  m0.x *= (t2 - t1) / (t2 - t0);
+  m0.y *= (t2 - t1) / (t2 - t0);
+  m1.x *= (t2 - t1) / (t3 - t1);
+  m1.y *= (t2 - t1) / (t3 - t1);
+  
+  // Map t to [0, 1] for the current segment
+  const segmentT = (t - t1) / (t2 - t1);
+  
+  // Return the interpolated point
+  return hermite(p1, p2, m0, m1, segmentT);
+}
+
+/**
+ * Simplified version of centripetal Catmull-Rom spline for ease of use
+ * @param {Array} points - Array of {x, y} coordinates
+ * @param {number} segments - Number of segments to generate per curve section
+ * @returns {Array} Array of {x, y} points representing the smooth curve
+ */
+function createSmoothCurve(points, segments = 20) {
+  // Use the centripetal parameter (alpha = 0.5) as it generally gives the best results
+  return createCentripetalCatmullRomSpline(points, segments, 0.5);
+}
+/**
+ * Converts an array of points into a smooth curve using quadratic Bézier interpolation
+ * @param {Array} points - Array of {x, y} coordinates
+ * @param {number} segments - Number of segments to generate per curve section
+ * @param {number} tension - Tension parameter (0-1) controlling curve smoothness
+ * @returns {Array} Array of {x, y} points representing the smooth curve
+ */
+function createSmoothQuadraticCurve(points, segments = 15, tension = 1) {
+  if (!points || points.length < 2) {
+    return [];
+  }
+
+  // Result array
+  const curvePoints = [];
+  const n = points.length;
+  
+  // Add first point
+  curvePoints.push({ x: points[0].x, y: points[0].y });
+  
+  // Special case for 2 points - just use a simple quadratic Bézier
+  if (n === 2) {
+    const p0 = points[0];
+    const p2 = points[1];
+    // Midpoint as control point
+    const p1 = {
+      x: (p0.x + p2.x) / 2,
+      y: (p0.y + p2.y) / 2
+    };
+    
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      const point = calculateQuadraticPoint(t, p0, p1, p2);
+      curvePoints.push(point);
+    }
+    
+    return curvePoints;
+  }
+  
+  // Calculate control points
+  const controlPoints = [];
+  
+  // For each pair of points, calculate a control point
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = i > 0 ? points[i - 1] : points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = i < n - 2 ? points[i + 2] : p2;
+    
+    // Calculate control point using Catmull-Rom to Bézier conversion
+    const cp = {
+      x: p1.x + (p2.x - p0.x) * tension / 6,
+      y: p1.y + (p2.y - p0.y) * tension / 6
+    };
+    
+    controlPoints.push(cp);
+  }
+  
+  // Add last control point
+  controlPoints.push({
+    x: points[n - 1].x - (points[n - 1].x - points[n - 2].x) * tension / 6,
+    y: points[n - 1].y - (points[n - 1].y - points[n - 2].y) * tension / 6
+  });
+  
+  // Generate curve points
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = points[i];
+    const p2 = points[i + 1];
+    
+    // Use virtual control points to create a smooth curve
+    const cp1 = controlPoints[i];
+    const cp2 = controlPoints[i + 1];
+    
+    // Use multiple quadratic Bézier segments for smoother curves
+    const numSubSegments = 3;
+    
+    for (let j = 0; j < numSubSegments; j++) {
+      const t1 = j / numSubSegments;
+      const t2 = (j + 1) / numSubSegments;
+      
+      // Calculate virtual control points for this segment
+      const segP0 = j === 0 ? p0 : {
+        x: (1 - t1) * (1 - t1) * p0.x + 2 * (1 - t1) * t1 * cp1.x + t1 * t1 * p2.x,
+        y: (1 - t1) * (1 - t1) * p0.y + 2 * (1 - t1) * t1 * cp1.y + t1 * t1 * p2.y
+      };
+      
+      const segP2 = j === numSubSegments - 1 ? p2 : {
+        x: (1 - t2) * (1 - t2) * p0.x + 2 * (1 - t2) * t2 * cp2.x + t2 * t2 * p2.x,
+        y: (1 - t2) * (1 - t2) * p0.y + 2 * (1 - t2) * t2 * cp2.y + t2 * t2 * p2.y
+      };
+      
+      // Control point for this segment - weighted average of the two control points
+      const weight = (t1 + t2) / 2;
+      const segCP = {
+        x: (1 - weight) * cp1.x + weight * cp2.x,
+        y: (1 - weight) * cp1.y + weight * cp2.y
+      };
+      
+      // Generate points for this segment
+      for (let k = 0; k < segments / numSubSegments; k++) {
+        const t = k / (segments / numSubSegments);
+        const point = calculateQuadraticPoint(t, segP0, segCP, segP2);
+        
+        // Only add if it's not too close to the previous point
+        if (k > 0 || j > 0 || i > 0) {
+          curvePoints.push(point);
+        }
+      }
+    }
+  }
+  
+  // Add the last point
+  curvePoints.push({ x: points[n - 1].x, y: points[n - 1].y });
+  
+  return curvePoints;
+}
+
+/**
+ * Calculates a single point on a quadratic Bézier curve
+ * @param {number} t - Parameter between 0 and 1
+ * @param {Object} p0 - Start point
+ * @param {Object} p1 - Control point
+ * @param {Object} p2 - End point
+ * @returns {Object} Point on the curve
+ */
+function calculateQuadraticPoint(t, p0, p1, p2) {
+  const mt = 1 - t;
+  const mt2 = mt * mt;
+  const t2 = t * t;
+  
+  return {
+    x: mt2 * p0.x + 2 * mt * t * p1.x + t2 * p2.x,
+    y: mt2 * p0.y + 2 * mt * t * p1.y + t2 * p2.y
+  };
+}
+
+/**
+ * An alternative approach using cubic Hermite interpolation for extra smoothness
+ * @param {Array} points - Array of {x, y} coordinates
+ * @param {number} segments - Number of segments to generate per curve section
+ * @param {number} tension - Tension parameter (0-1) controlling curve tightness
+ * @returns {Array} Array of {x, y} points representing the smooth curve
+ */
+function createHermiteSpline(points, segments = 15, tension = 0.5) {
+  if (!points || points.length < 2) {
+    return [];
+  }
+
+  const result = [];
+  const n = points.length;
+  
+  // Add first point
+  result.push({ x: points[0].x, y: points[0].y });
+  
+  // Calculate tangent vectors
+  const tangents = [];
+  
+  for (let i = 0; i < n; i++) {
+    let tangent = { x: 0, y: 0 };
+    
+    if (i === 0) {
+      // First point: use forward difference
+      tangent = {
+        x: points[1].x - points[0].x,
+        y: points[1].y - points[0].y
+      };
+    } else if (i === n - 1) {
+      // Last point: use backward difference
+      tangent = {
+        x: points[n-1].x - points[n-2].x,
+        y: points[n-1].y - points[n-2].y
+      };
+    } else {
+      // Middle points: use cardinal spline formula
+      tangent = {
+        x: (points[i+1].x - points[i-1].x) * tension,
+        y: (points[i+1].y - points[i-1].y) * tension
+      };
+    }
+    
+    tangents.push(tangent);
+  }
+  
+  // Generate curve points
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const m0 = tangents[i];
+    const m1 = tangents[i + 1];
+    
+    for (let j = 1; j <= segments; j++) {
+      const t = j / segments;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      
+      // Hermite basis functions
+      const h1 = 2 * t3 - 3 * t2 + 1;
+      const h2 = -2 * t3 + 3 * t2;
+      const h3 = t3 - 2 * t2 + t;
+      const h4 = t3 - t2;
+      
+      // Calculate point
+      const point = {
+        x: h1 * p0.x + h2 * p1.x + h3 * m0.x + h4 * m1.x,
+        y: h1 * p0.y + h2 * p1.y + h3 * m0.y + h4 * m1.y
+      };
+      
+      result.push(point);
+    }
+  }
+  
+  return result;
+}
+
+
+/**
+ * Converts an array of points into a set of points representing a smooth Bézier curve
+ * @param {Array} points - Array of {x, y} coordinates
+ * @param {number} segments - Number of segments to generate per curve section
+ * @param {number} smoothness - Factor controlling control point distance (0-1, higher = smoother)
+ * @returns {Array} Array of {x, y} points representing the smooth Bézier curve
+ */
+function createSmoothBezierCurve(points, segments = 10, smoothness = 1) {
+  if (!points || points.length < 2) {
+    return [];
+  }
+
+  // Generate control points for each point
+  const controlPoints = calculateSmoothControlPoints(points, smoothness);
+  const bezierPoints = [];
+  
+  // Add the first point
+  bezierPoints.push({ x: points[0].x, y: points[0].y });
+  
+  // For each point (except the last one), generate a cubic Bézier curve
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];           // Current point
+    const p3 = points[i + 1];       // Next point
+    const p1 = controlPoints[i][1]; // Second control point of current point
+    const p2 = controlPoints[i + 1][0]; // First control point of next point
+    
+    // Generate points along the cubic Bézier curve
+    for (let j = 1; j <= segments; j++) {
+      const t = j / segments;
+      const point = calculateBezierPoint(t, p0, p1, p2, p3);
+      bezierPoints.push(point);
+    }
+  }
+  
+  return bezierPoints;
+}
+
+/**
+ * Calculates smooth control points for all points
+ * @param {Array} points - Array of {x, y} coordinates
+ * @param {number} smoothness - Factor controlling control point distance (0-1)
+ * @returns {Array} Array of control point pairs for each point
+ */
+function calculateSmoothControlPoints(points, smoothness = 0.4) {
+  const n = points.length;
+  
+  // We need at least 3 points for smooth control point calculation
+  if (n < 3) {
+    // For 2 points, just use simple control points at 1/3 and 2/3
+    if (n === 2) {
+      const p0 = points[0];
+      const p1 = points[1];
+      const cp1x = p0.x + (p1.x - p0.x) / 3;
+      const cp1y = p0.y + (p1.y - p0.y) / 3;
+      const cp2x = p1.x - (p1.x - p0.x) / 3;
+      const cp2y = p1.y - (p1.y - p0.y) / 3;
+      
+      return [
+        [null, { x: cp1x, y: cp1y }],
+        [{ x: cp2x, y: cp2y }, null]
+      ];
+    }
+    return [];
+  }
+  
+  // Calculate tangent vectors at each point
+  const tangents = [];
+  
+  for (let i = 0; i < n; i++) {
+    let prevPoint, nextPoint;
+    
+    if (i === 0) {
+      // First point
+      prevPoint = points[0];
+      nextPoint = points[1];
+    } else if (i === n - 1) {
+      // Last point
+      prevPoint = points[n - 2];
+      nextPoint = points[n - 1];
+    } else {
+      // Middle points - use points on both sides
+      prevPoint = points[i - 1];
+      nextPoint = points[i + 1];
+    }
+    
+    // Calculate tangent as a vector from previous to next point
+    const tangent = {
+      x: nextPoint.x - prevPoint.x,
+      y: nextPoint.y - prevPoint.y
+    };
+    
+    // Normalize tangent vector
+    const length = Math.sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
+    if (length > 0) {
+      tangent.x /= length;
+      tangent.y /= length;
+    }
+    
+    tangents.push(tangent);
+  }
+  
+  // Calculate control points for each point
+  const controlPoints = [];
+  
+  for (let i = 0; i < n; i++) {
+    const tangent = tangents[i];
+    const point = points[i];
+    
+    // Determine distance to adjacent points
+    let distanceToPrev = 0;
+    let distanceToNext = 0;
+    
+    if (i > 0) {
+      const prev = points[i - 1];
+      distanceToPrev = Math.sqrt(
+        Math.pow(point.x - prev.x, 2) + 
+        Math.pow(point.y - prev.y, 2)
+      );
+    }
+    
+    if (i < n - 1) {
+      const next = points[i + 1];
+      distanceToNext = Math.sqrt(
+        Math.pow(next.x - point.x, 2) + 
+        Math.pow(next.y - point.y, 2)
+      );
+    }
+    
+    // Control point distances are based on distances to adjacent points
+    // multiplied by the smoothness factor
+    const cp1Distance = distanceToPrev * smoothness;
+    const cp2Distance = distanceToNext * smoothness;
+    
+    // Calculate control points based on tangent vector
+    const cp1 = i > 0 ? {
+      x: point.x - tangent.x * cp1Distance,
+      y: point.y - tangent.y * cp1Distance
+    } : null;
+    
+    const cp2 = i < n - 1 ? {
+      x: point.x + tangent.x * cp2Distance,
+      y: point.y + tangent.y * cp2Distance
+    } : null;
+    
+    controlPoints.push([cp1, cp2]);
+  }
+  
+  return controlPoints;
+}
+  
+/**
+ * Calculates a single point on a cubic Bézier curve
+ * @param {number} t - Parameter between 0 and 1
+ * @param {Object} p0 - Start point
+ * @param {Object} p1 - First control point
+ * @param {Object} p2 - Second control point
+ * @param {Object} p3 - End point
+ * @returns {Object} Point on the curve
+ */
+function calculateBezierPoint(t, p0, p1, p2, p3) {
+  const mt = 1 - t;
+  const mt2 = mt * mt;
+  const mt3 = mt2 * mt;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  
+  return {
+    x: mt3 * p0.x + 3 * mt2 * t * p1.x + 3 * mt * t2 * p2.x + t3 * p3.x,
+    y: mt3 * p0.y + 3 * mt2 * t * p1.y + 3 * mt * t2 * p2.y + t3 * p3.y
+  };
+}
+
   /**
    * Smooths the last point in a three-point sequence to ensure a smooth curve
    * with limited curvature.
@@ -469,7 +982,7 @@ export default function MyMap() {
     let distanceBetweenPoints = computeLineLength([lastPoint, newPoint]) / 3.281 ; // Convert to meters
     console.log(distanceBetweenPoints)
     // console.log(d);
-    if (distanceBetweenPoints > 0.3) {
+    if (distanceBetweenPoints > 0.5) {
       let tempLine = [...currentLine, newPoint];
 
       if (tempLine.length >= 3) {
@@ -487,23 +1000,33 @@ export default function MyMap() {
           //   MIN_TURNING_RADIUS,
           //   50
           // );
-          let smoothedP3 = smoothPoint(
-            tempLine[tempLine.length - 3],
-            tempLine[tempLine.length - 2],
-            tempLine[tempLine.length - 1]
-          );
-          // console.log(tempLine);
+          // convert tempLine to cartesian. 
+          let tempLineCartesian = tempLine.map((point) => latlngToCartesian(point.lat, point.lng));
 
-          console.log("Adjusted Points:", smoothedP3);
-          tempLine[tempLine.length - 1] = smoothedP3;
+          tempLineCartesian = createSmoothCurve(tempLineCartesian);
+          // filter points that has Nan values
+          tempLineCartesian = tempLineCartesian.filter((point) => !isNaN(point.x) && !isNaN(point.y));
+          // convert back to latlng
+          console.log("templine cartesien", tempLineCartesian);
+          tempLine = tempLineCartesian.map((point) => cartesianToLatlng(point.x, point.y, 10));
+        
+          // let smoothedP3 = smoothPoint(
+          //   tempLine[tempLine.length - 3],
+          //   tempLine[tempLine.length - 2],
+          //   tempLine[tempLine.length - 1]
+          // );
+          // // console.log(tempLine);
+
+          console.log("Adjusted Points:", tempLine);
+          // tempLine[tempLine.length - 1] = smoothedP3;
           let newPath = [...tempLine];
-          // let newPath = [...tempLine];
-          // newPath = [
-          //   tempLine[0],
-          //   smoothedPoints[1],
-          //   tempLine[tempLine.length - 1],
-          // ];
-          // newPath.splice(newPath.length - 2, 1, ...smoothedPoints); // Insert valid lat/lng
+          // // let newPath = [...tempLine];
+          // // newPath = [
+          // //   tempLine[0],
+          // //   smoothedPoints[1],
+          // //   tempLine[tempLine.length - 1],
+          // // ];
+          // // newPath.splice(newPath.length - 2, 1, ...smoothedPoints); // Insert valid lat/lng
           console.log(newPath);
           let radii = calculateCurvature(newPath);
           let newLastRadius = radii[radii.length - 1];
