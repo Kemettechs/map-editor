@@ -46,6 +46,7 @@
     "react-dom": "^19.0.0",
     "react-toastify": "^11.0.5",
     "simple-undo": "^1.0.2",
+    "simplify-js": "^1.2.4",
     "spherical-geometry-js": "^3.0.2",
     "worker-loader": "^3.0.8",
     "yarn": "^1.22.22"

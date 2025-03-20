@@ -407,6 +407,76 @@ const MapEditor = ({ p }) => {
   //   setCurrentLine(tempLine);
   //   setCurrentLength(computeLineLength(tempLine));
   // };
+
+  // const handleMouseMove = (e) => {
+  //     if (!isDrawing || !isMouseDown) return;
+
+  //     let newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+  //     let tempLine = [...currentLine, newPoint];
+
+  //     if (tempLine.length >= 3) {
+  //       let radii = calculateCurvature(tempLine);
+  //       let lastRadius = radii[radii.length - 1];
+
+  //       console.log("Last Radius:", lastRadius);
+
+  //       if (lastRadius < MIN_TURNING_RADIUS) {
+  //         let lastPoints = tempLine.slice(-10);
+  //         console.log("Last Points Before Simplification:", lastPoints);
+
+  //         let simplified = [lastPoints[0]];
+  //         let prevPoint = lastPoints[0];
+
+  //         for (let i = 1; i < lastPoints.length - 1; i++) {
+  //           let distance = computeLineLength([prevPoint, lastPoints[i]]);
+
+  //           if (distance > 1.2) {
+  //             // Keep more points
+  //             simplified.push(lastPoints[i]);
+  //             prevPoint = lastPoints[i];
+  //           }
+  //         }
+
+  //         simplified.push(lastPoints[lastPoints.length - 1]); // Keep last point
+
+  //         // Ensure at least 6 points before smoothing
+  //         if (simplified.length < 6) {
+  //           simplified = lastPoints;
+  //         }
+
+  //         console.log("After Simplification:", simplified);
+
+  //         let lastPointsCartesian = simplified
+  //           .filter((point) => isFinite(point.lat) && isFinite(point.lng))
+  //           .map((point) => latlngToCartesian(point.lat, point.lng));
+
+  //         console.log("Cartesian Points Before Smoothing:", lastPointsCartesian);
+
+  //         if (lastPointsCartesian.length > 5) {
+  //           lastPointsCartesian = createSmoothBezierCurve(
+  //             lastPointsCartesian,
+  //             segments,
+  //             smoothness
+  //           );
+  //         }
+
+  //         console.log("After Smoothing:", lastPointsCartesian);
+
+  //         lastPoints = lastPointsCartesian.map((point) =>
+  //           cartesianToLatlng(point.x, point.y, 10)
+  //         );
+
+  //         // Replace last points with smoothed curve
+  //         tempLine = [...tempLine.slice(0, -10), ...lastPoints];
+  //       }
+  //     }
+
+  //     requestAnimationFrame(() => {
+  //       setCurrentLine(tempLine);
+  //       setCurrentLength(computeLineLength(tempLine));
+  //     });
+  //   };
+
   return (
     <>
       <div id="mapcanvas" ref={mapRef}></div>

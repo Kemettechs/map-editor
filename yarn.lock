@@ -2031,6 +2031,11 @@ simple-undo@^1.0.2:
   resolved "https://registry.yarnpkg.com/simple-undo/-/simple-undo-1.0.2.tgz#ee8fe6189945cd6aa12a31df967515f4f4e8becc"
   integrity sha512-R/BQ9+tv5YFOoKj1l4cmYN4Gsh3Ym1qfSb24AlxOd0T3AxSpt4FJYaYPphiI4LOlBjt/Gf6lKGlnobZxPBgGNg==
 
+simplify-js@^1.2.4:
+  version "1.2.4"
+  resolved "https://registry.yarnpkg.com/simplify-js/-/simplify-js-1.2.4.tgz#7aab22d6df547ffd40ef0761ccd82b75287d45c7"
+  integrity sha512-vITfSlwt7h/oyrU42R83mtzFpwYk3+mkH9bOHqq/Qw6n8rtR7aE3NZQ5fbcyCUVVmuMJR6ynsAhOfK2qoah8Jg==
+
 source-map-js@^1.2.1:
   version "1.2.1"
   resolved "https://registry.yarnpkg.com/source-map-js/-/source-map-js-1.2.1.tgz#1ce5650fddd87abc099eda37dcff024c2667ae46"
