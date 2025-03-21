@@ -203,6 +203,61 @@ export default function MyMap() {
     return curvatures;
   };
 
+/**
+ * Filter points to be approximately 1.5 meters apart
+ * @param {Array} points - Array of objects with lat and lng properties
+ * @returns {Array} Filtered array of points
+ */
+function filterPointsByDistance(points) {
+  if (!points || points.length === 0) {
+    return [];
+  }
+  
+  const result = [];
+  const targetDistanceInMeters = 1.5;
+  const targetDistanceInFeet = targetDistanceInMeters * 3.28084; // Convert to feet
+  
+  // Always include the first point
+  result.push(points[0]);
+  
+  let lastIncludedPoint = points[0];
+  
+  // Check each point
+  for (let i = 1; i < points.length; i++) {
+    const currentPoint = points[i];
+    
+    // Create a line segment between the last included point and current point
+    const lineSegment = [lastIncludedPoint, currentPoint];
+    
+    // Compute distance in feet
+    const distanceInFeet = computeLineLength(lineSegment);
+    
+    // If distance is approximately 1.5 meters (with small tolerance)
+    if (Math.abs(distanceInFeet - targetDistanceInFeet) < 0.1 * targetDistanceInFeet) {
+      result.push(currentPoint);
+      lastIncludedPoint = currentPoint;
+    }
+    // If we've gone too far without finding a suitable point, interpolate
+    else if (distanceInFeet > targetDistanceInFeet) {
+      // Find a point that's approximately 1.5 meters away through interpolation
+      const ratio = targetDistanceInFeet / distanceInFeet;
+      
+      const interpolatedPoint = {
+        lat: lastIncludedPoint.lat + (currentPoint.lat - lastIncludedPoint.lat) * ratio,
+        lng: lastIncludedPoint.lng + (currentPoint.lng - lastIncludedPoint.lng) * ratio
+      };
+      
+      result.push(interpolatedPoint);
+      lastIncludedPoint = interpolatedPoint;
+      
+      // Don't skip the current point, it might be needed for the next segment
+      i--;
+    }
+  }
+  
+  return result;
+}
+
   /**
    * Creates a smooth curve using Centripetal Catmull-Rom spline interpolation
    * @param {Array} points - Array of {x, y} coordinates
@@ -891,7 +946,7 @@ export default function MyMap() {
   };
   let pointsAdj = 1000000;
   const MIN_TURNING_RADIUS = 10;
-  const distanceBetweenTwoPoint = 1.5;
+  const distanceBetweenTwoPoint = 0.1;
   const segments = 5;
   const smoothness = 0.5;
   /**
@@ -1088,8 +1143,10 @@ export default function MyMap() {
 
         if (lastRadius < MIN_TURNING_RADIUS) {
           // Extract last 10 points to process
-          let lastPoints = tempLine.slice(-10);
+          let lastPoints = tempLine.slice(-30);
 
+          // filter the points to have a new array with points of distance of 1.5M between them. 
+          lastPoints = filterPointsByDistance(lastPoints)
           // Convert to Cartesian
           let lastPointsCartesian = lastPoints
             .filter(
@@ -1097,16 +1154,16 @@ export default function MyMap() {
             )
             .map((point) => latlngToCartesian(point.lat, point.lng));
 
-          if (lastPointsCartesian.length > 10) {
-            const simplified = simplify(
-              lastPointsCartesian,
-              Math.max(1, lastPointsCartesian.length * 0.005),
-              true
-            );
-            lastPointsCartesian =
-              simplified.length > 5 ? simplified : lastPointsCartesian;
-          }
-
+          // if (lastPointsCartesian.length > 10) {
+          //   const simplified = simplify(
+          //     lastPointsCartesian,
+          //     Math.max(1, lastPointsCartesian.length * 0.005),
+          //     true
+          //   );
+          //   lastPointsCartesian =
+          //     simplified.length > 5 ? simplified : lastPointsCartesian;
+          // }
+          
           // Smooth if enough points remain
           if (lastPointsCartesian.length > 5) {
             lastPointsCartesian = createSmoothBezierCurve(
@@ -1121,8 +1178,8 @@ export default function MyMap() {
             cartesianToLatlng(point.x, point.y, 10)
           );
 
-          // Preserve earlier points, replace only last 10
-          tempLine = [...tempLine.slice(0, -10), ...lastPoints];
+          // Preserve earlier points, replace only last 20
+          tempLine = [...tempLine.slice(0, -30), ...lastPoints];
         }
       }
 
