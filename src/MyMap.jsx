@@ -5,12 +5,13 @@ import {
   useLoadScript,
   Polyline,
   GroundOverlay,
+  Circle,
 } from "@react-google-maps/api";
 import simplify from "simplify-js"; // Install with `yarn add simplify-js`
 
 import Papa from "papaparse";
 import proj4 from "proj4";
-import { ActionIcon, Tooltip } from "@mantine/core";
+import { ActionIcon, Button, Paper, Tooltip } from "@mantine/core";
 import { ToastContainer } from "react-toastify";
 import {
   IconDownload,
@@ -80,9 +81,14 @@ export default function MyMap() {
   const mapRef = useRef(null);
   const [currentLength, setCurrentLength] = useState(0); // Length of active line
   const fileInputRef = useRef(null);
+  const fileInputRefEndPoints = useRef(null);
+  const [paths, setPaths] = useState([]); // Store multiple paths
+
+  const fileInputRefPerimeter = useRef(null);
   const [isMouseDown, setIsMouseDown] = useState(false); // Track mouse state
   const [bounds, setBounds] = useState(null);
   const [polygonCoords, setPolygonCoords] = useState([]);
+  const [points, setPoints] = useState([]);
 
   // Function to update bounds dynamically
   const updateBounds = () => {
@@ -203,60 +209,67 @@ export default function MyMap() {
     return curvatures;
   };
 
-/**
- * Filter points to be approximately 1.5 meters apart
- * @param {Array} points - Array of objects with lat and lng properties
- * @returns {Array} Filtered array of points
- */
-function filterPointsByDistance(points) {
-  if (!points || points.length === 0) {
-    return [];
-  }
-  
-  const result = [];
-  const targetDistanceInMeters = 1.5;
-  const targetDistanceInFeet = targetDistanceInMeters * 3.28084; // Convert to feet
-  
-  // Always include the first point
-  result.push(points[0]);
-  
-  let lastIncludedPoint = points[0];
-  
-  // Check each point
-  for (let i = 1; i < points.length; i++) {
-    const currentPoint = points[i];
-    
-    // Create a line segment between the last included point and current point
-    const lineSegment = [lastIncludedPoint, currentPoint];
-    
-    // Compute distance in feet
-    const distanceInFeet = computeLineLength(lineSegment);
-    
-    // If distance is approximately 1.5 meters (with small tolerance)
-    if (Math.abs(distanceInFeet - targetDistanceInFeet) < 0.1 * targetDistanceInFeet) {
-      result.push(currentPoint);
-      lastIncludedPoint = currentPoint;
+  /**
+   * Filter points to be approximately 1.5 meters apart
+   * @param {Array} points - Array of objects with lat and lng properties
+   * @returns {Array} Filtered array of points
+   */
+  function filterPointsByDistance(points) {
+    if (!points || points.length === 0) {
+      return [];
     }
-    // If we've gone too far without finding a suitable point, interpolate
-    else if (distanceInFeet > targetDistanceInFeet) {
-      // Find a point that's approximately 1.5 meters away through interpolation
-      const ratio = targetDistanceInFeet / distanceInFeet;
-      
-      const interpolatedPoint = {
-        lat: lastIncludedPoint.lat + (currentPoint.lat - lastIncludedPoint.lat) * ratio,
-        lng: lastIncludedPoint.lng + (currentPoint.lng - lastIncludedPoint.lng) * ratio
-      };
-      
-      result.push(interpolatedPoint);
-      lastIncludedPoint = interpolatedPoint;
-      
-      // Don't skip the current point, it might be needed for the next segment
-      i--;
+
+    const result = [];
+    const targetDistanceInMeters = 1.5;
+    const targetDistanceInFeet = targetDistanceInMeters * 3.28084; // Convert to feet
+
+    // Always include the first point
+    result.push(points[0]);
+
+    let lastIncludedPoint = points[0];
+
+    // Check each point
+    for (let i = 1; i < points.length; i++) {
+      const currentPoint = points[i];
+
+      // Create a line segment between the last included point and current point
+      const lineSegment = [lastIncludedPoint, currentPoint];
+
+      // Compute distance in feet
+      const distanceInFeet = computeLineLength(lineSegment);
+
+      // If distance is approximately 1.5 meters (with small tolerance)
+      if (
+        Math.abs(distanceInFeet - targetDistanceInFeet) <
+        0.1 * targetDistanceInFeet
+      ) {
+        result.push(currentPoint);
+        lastIncludedPoint = currentPoint;
+      }
+      // If we've gone too far without finding a suitable point, interpolate
+      else if (distanceInFeet > targetDistanceInFeet) {
+        // Find a point that's approximately 1.5 meters away through interpolation
+        const ratio = targetDistanceInFeet / distanceInFeet;
+
+        const interpolatedPoint = {
+          lat:
+            lastIncludedPoint.lat +
+            (currentPoint.lat - lastIncludedPoint.lat) * ratio,
+          lng:
+            lastIncludedPoint.lng +
+            (currentPoint.lng - lastIncludedPoint.lng) * ratio,
+        };
+
+        result.push(interpolatedPoint);
+        lastIncludedPoint = interpolatedPoint;
+
+        // Don't skip the current point, it might be needed for the next segment
+        i--;
+      }
     }
+
+    return result;
   }
-  
-  return result;
-}
 
   /**
    * Creates a smooth curve using Centripetal Catmull-Rom spline interpolation
@@ -1145,8 +1158,8 @@ function filterPointsByDistance(points) {
           // Extract last 10 points to process
           let lastPoints = tempLine.slice(-30);
 
-          // filter the points to have a new array with points of distance of 1.5M between them. 
-          lastPoints = filterPointsByDistance(lastPoints)
+          // filter the points to have a new array with points of distance of 1.5M between them.
+          lastPoints = filterPointsByDistance(lastPoints);
           // Convert to Cartesian
           let lastPointsCartesian = lastPoints
             .filter(
@@ -1163,7 +1176,7 @@ function filterPointsByDistance(points) {
           //   lastPointsCartesian =
           //     simplified.length > 5 ? simplified : lastPointsCartesian;
           // }
-          
+
           // Smooth if enough points remain
           if (lastPointsCartesian.length > 5) {
             lastPointsCartesian = createSmoothBezierCurve(
@@ -1242,36 +1255,48 @@ function filterPointsByDistance(points) {
     }
   };
   //handleFileUpload
+
   const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+    const file = event.target.files[0]; // Get the uploaded file
+    if (!file) return; // Stop if no file is selected
 
     Papa.parse(file, {
-      header: true,
-      complete: (results) => {
-        let points = results.data
-          .map((row) => ({
-            lat: parseFloat(row.latitude),
-            lng: parseFloat(row.longitude),
-          }))
-          .filter((point) => !isNaN(point.lat) && !isNaN(point.lng));
+      complete: (result) => {
+        let newLines = [];
+        let currentLine = [];
 
-        if (points.length > 2) {
-          // Ensure polygon is closed
-          const firstPoint = points[0];
-          const lastPoint = points[points.length - 1];
+        result.data.forEach((row) => {
+          if (row.length === 1 && row[0] === "NEWGROUP") {
+            if (currentLine.length > 0) {
+              newLines.push([...currentLine]);
+              currentLine = [];
+            }
+          } else if (row.length >= 2) {
+            const lat = parseFloat(row[0]);
+            const lng = parseFloat(row[1]);
 
-          if (
-            firstPoint.lat !== lastPoint.lat ||
-            firstPoint.lng !== lastPoint.lng
-          ) {
-            points.push(firstPoint); // Close the polygon
+            if (!isNaN(lat) && !isNaN(lng)) {
+              currentLine.push({ lat, lng });
+            }
           }
+        });
 
-          setPolygonCoords(points);
-          fitMapToPolygon(points);
+        if (currentLine.length > 0) {
+          newLines.push(currentLine);
+        }
+
+        setLines(newLines);
+
+        // ✅ Compute the length of the last line and update state
+        if (newLines.length > 0) {
+          const lastLine = newLines[newLines.length - 1];
+          setCurrentLength(computeLineLength(lastLine));
+        } else {
+          setCurrentLength(0);
         }
       },
+      header: false,
+      skipEmptyLines: true,
     });
   };
 
@@ -1282,24 +1307,101 @@ function filterPointsByDistance(points) {
       return;
     }
 
-    let csvContent = "data:text/csv;charset=utf-8,Latitude,Longitude\n";
+    let csvContent = "Latitude,Longitude\n"; // CSV header
 
     lines.forEach((line, index) => {
-      csvContent += `Line ${index + 1}\n`;
+      if (index > 0) csvContent += "NEWGROUP\n"; // Separator between different lines
       line.forEach((point) => {
         csvContent += `${point.lat},${point.lng}\n`;
       });
-      csvContent += "\n"; // Blank line between different lines
     });
 
-    const encodedUri = encodeURI(csvContent);
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "drawn_lines.csv");
+    link.href = url;
+    link.download = "drawn_lines.csv";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
+
+  const handleFileUploadEndPoints = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      complete: (result) => {
+        const extractedPoints = result.data
+          .filter((row) => row.length >= 2)
+          .map((row) => ({
+            lat: parseFloat(row[0]),
+            lng: parseFloat(row[1]),
+          }))
+          .filter((point) => !isNaN(point.lat) && !isNaN(point.lng));
+
+        setPoints(extractedPoints); // Store all points at once
+        if (mapRef.current && extractedPoints.length > 0) {
+          mapRef.current.panTo(extractedPoints[0]); // Move to the first point
+        }
+      },
+    });
+  };
+
+  const handleFileUploadPerimeter = (csvData) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      complete: (result) => {
+        const csvData = result.data;
+        let extractedPaths = [];
+        let currentPath = [];
+
+        csvData.forEach((row) => {
+          const firstColumn = row[0]?.trim().toUpperCase();
+
+          if (row.length === 1 && firstColumn === "NEWGROUP") {
+            // If there are existing points, save them as a separate polyline
+            if (currentPath.length > 0) {
+              extractedPaths.push([...currentPath]);
+              currentPath = []; // Reset path for the next group
+            }
+          } else if (row.length >= 2) {
+            // Convert to numbers
+            const lat = parseFloat(row[0]);
+            const lng = parseFloat(row[1]);
+
+            if (!isNaN(lat) && !isNaN(lng)) {
+              currentPath.push({ lat, lng });
+            }
+          }
+        });
+
+        // Push the last group if it has points
+        if (currentPath.length > 0) {
+          extractedPaths.push([...currentPath]);
+        }
+
+        setPaths(extractedPaths);
+
+        // Pan to the first polyline if available
+        if (
+          mapRef.current &&
+          extractedPaths.length > 0 &&
+          extractedPaths[0].length > 0
+        ) {
+          mapRef.current.panTo(extractedPaths[0][0]);
+        }
+      },
+      skipEmptyLines: true,
+    });
+  };
+
+  // Use useEffect to log when paths updates
+  useEffect(() => {
+    console.log("Updated paths:", paths);
+  }, [paths]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
@@ -1332,7 +1434,31 @@ function filterPointsByDistance(points) {
               }}
             />
           )}
-
+          {points.map((point, index) => (
+            <Circle
+              key={index}
+              center={point}
+              radius={0.6} // Approx. 2px size
+              options={{
+                fillColor: "magenta",
+                fillOpacity: 1, // Ensures the circle is fully filled
+                strokeColor: "magenta",
+                strokeWeight: 0, // Remove border if not needed
+              }}
+            />
+          ))}
+          {paths.map((path, index) => (
+            <Polyline
+              key={index}
+              path={path}
+              options={{
+                strokeColor: `#4CC9FE`, // Unique color per path
+                strokeOpacity: 1,
+                strokeWeight: 2,
+                geodesic: true,
+              }}
+            />
+          ))}
           {/* Render all drawn lines */}
           {lines.map((path, idx) => (
             <Polyline
@@ -1446,6 +1572,52 @@ function filterPointsByDistance(points) {
           </ActionIcon>
         </Tooltip>
       </div>
+      <Paper
+        p="sm"
+        shadow="sm"
+        radius="md"
+        style={{
+          backgroundColor: "white",
+          position: "absolute",
+          top: 60,
+          left: 5,
+          zIndex: 1000,
+        }}
+      >
+        <input
+          ref={fileInputRefPerimeter}
+          style={{ display: "none" }}
+          type="file"
+          accept=".csv"
+          onChange={handleFileUploadPerimeter}
+        />
+
+        <Button
+          mb="xs"
+          radius="md"
+          onClick={() => fileInputRefPerimeter.current?.click()}
+          size="xs"
+        >
+          Perimeter File
+        </Button>
+        <br />
+        <input
+          ref={fileInputRefEndPoints}
+          style={{ display: "none" }}
+          type="file"
+          accept=".csv"
+          onChange={handleFileUploadEndPoints}
+        />
+
+        <Button
+          radius="md"
+          onClick={() => fileInputRefEndPoints.current?.click()}
+          size="xs"
+        >
+          Endpoints File
+        </Button>
+      </Paper>
+
       <ToastContainer />
     </div>
   );
