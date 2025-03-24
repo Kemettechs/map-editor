@@ -20,10 +20,13 @@ export default function RobotOverlay({ position, rotation, map }) {
         this.div.style.position = "absolute";
         this.div.style.transformOrigin = "center";
         this.div.style.pointerEvents = "none"; // Prevent interaction issues
-        this.div.innerHTML = `
-          <img src="https://cdn-icons-png.flaticon.com/512/4712/4712035.png"
-            style="position: absolute; width: 100%; height: 100%; transform-origin: center;"/>
-        `;
+
+        // Create a rectangle to represent the robot
+        this.div.style.width = "100%";
+        this.div.style.height = "100%";
+        this.div.style.backgroundColor = "pink"; // Change color as needed
+        this.div.style.border = "1px solid black"; // Border for visibility
+
         this.getPanes().overlayLayer.appendChild(this.div);
       }
 
@@ -44,14 +47,14 @@ export default function RobotOverlay({ position, rotation, map }) {
 
         // Convert real-world dimensions (meters) to pixels
         const widthPx = 1.8 / metersPerPixel;
-        const heightPx = 4.5 / metersPerPixel;
+        const heightPx = 3.6 / metersPerPixel;
 
         // Apply size, positioning, and rotation
         this.div.style.width = `${widthPx}px`;
         this.div.style.height = `${heightPx}px`;
         this.div.style.left = `${point.x - widthPx / 2}px`;
         this.div.style.top = `${point.y - heightPx / 2}px`;
-        this.div.style.transform = `rotate(${this.rotation}deg)`;
+        this.div.style.transform = `rotate(${this.rotation + 90}deg)`;
       }
 
       onRemove() {
