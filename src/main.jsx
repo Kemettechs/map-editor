@@ -3,6 +3,7 @@ import "@mantine/core/styles.css";
 // import "./index.cs
 import MyMap from "./MyMap";
 import { MantineProvider } from "@mantine/core";
+import MapContainer from "./MapContainer";
 // const p = {
 //   editor: {
 //     /** Colors to be used in the UI. */
@@ -1313,6 +1314,7 @@ import { MantineProvider } from "@mantine/core";
 
 createRoot(document.getElementById("root")).render(
   <MantineProvider>
-    <MyMap />
+    {/* <MyMap /> */}
+    <MapContainer />
   </MantineProvider>
 );
