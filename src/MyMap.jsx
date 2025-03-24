@@ -5,10 +5,8 @@ import {
   useLoadScript,
   Polyline,
   GroundOverlay,
-  Circle,
   OverlayView,
 } from "@react-google-maps/api";
-import simplify from "simplify-js"; // Install with `yarn add simplify-js`
 
 import Papa from "papaparse";
 import proj4 from "proj4";
@@ -20,8 +18,6 @@ import {
   IconReload,
   IconUpload,
 } from "@tabler/icons-react";
-import * as math from "mathjs";
-import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   LineElement,
