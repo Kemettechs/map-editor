@@ -6,6 +6,7 @@ import {
   Polyline,
   GroundOverlay,
   Circle,
+  OverlayView,
 } from "@react-google-maps/api";
 import simplify from "simplify-js"; // Install with `yarn add simplify-js`
 
@@ -1266,7 +1267,7 @@ export default function MyMap() {
         let currentLine = [];
 
         result.data.forEach((row) => {
-          if (row.length === 1 && row[0] === "NEWGROUP") {
+          if (row[0] === "NEWGROUP") {
             if (currentLine.length > 0) {
               newLines.push([...currentLine]);
               currentLine = [];
@@ -1294,10 +1295,17 @@ export default function MyMap() {
         } else {
           setCurrentLength(0);
         }
+
+        if (mapRef.current && newLines.length > 0) {
+          mapRef.current.panTo(newLines[0][0]); // Move to the first line
+        }
+
       },
       header: false,
       skipEmptyLines: true,
     });
+
+    event.target.value = null;
   };
 
   // Convert drawn lines to CSV format and download
@@ -1307,7 +1315,7 @@ export default function MyMap() {
       return;
     }
 
-    let csvContent = "Latitude,Longitude\n"; // CSV header
+    let csvContent = "NEWGROUP\n"; // CSV header
 
     lines.forEach((line, index) => {
       if (index > 0) csvContent += "NEWGROUP\n"; // Separator between different lines
@@ -1320,7 +1328,10 @@ export default function MyMap() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "drawn_lines.csv";
+    const now = new Date();
+    const timestampString = now.toLocaleString(); // Simple, locale-sensitive format
+  
+    link.download = `drawn_lines_checkpoint_${timestampString}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1346,6 +1357,8 @@ export default function MyMap() {
         }
       },
     });
+
+    event.target.value = null;
   };
 
   const handleFileUploadPerimeter = (csvData) => {
@@ -1396,6 +1409,8 @@ export default function MyMap() {
       },
       skipEmptyLines: true,
     });
+    event.target.value = null;
+
   };
 
   // Use useEffect to log when paths updates
@@ -1435,17 +1450,25 @@ export default function MyMap() {
             />
           )}
           {points.map((point, index) => (
-            <Circle
-              key={index}
-              center={point}
-              radius={0.6} // Approx. 2px size
-              options={{
-                fillColor: "magenta",
-                fillOpacity: 1, // Ensures the circle is fully filled
-                strokeColor: "magenta",
-                strokeWeight: 0, // Remove border if not needed
-              }}
-            />
+            <OverlayView
+                key={index}
+                position={point}
+                mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                getPixelPositionOffset={(width, height) => ({
+                  x: -width / 2,
+                  y: -height / 2
+                })}
+              >
+                <div
+                  style={{
+                    width: '2px',
+                    height: '2px',
+                    borderRadius: '50%',
+                    backgroundColor: 'magenta',
+                    position: 'absolute'
+                  }}
+                />
+            </OverlayView>
           ))}
           {paths.map((path, index) => (
             <Polyline
@@ -1517,7 +1540,7 @@ export default function MyMap() {
 
       {/* Buttons on Map */}
       <div style={{ position: "absolute", top: 70, right: 5, zIndex: 1000 }}>
-        <Tooltip label="Upload CSV" position="left">
+        <Tooltip label="Upload Checkpoint" position="left">
           <ActionIcon
             onClick={() => fileInputRef.current?.click()}
             size="md"
