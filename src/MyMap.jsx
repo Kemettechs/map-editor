@@ -767,8 +767,8 @@ export default function MyMap() {
             >
               <div
                 style={{
-                  width: "4px",
-                  height: "4px",
+                  width: "100px",
+                  height: "100px",
                   borderRadius: "50%",
                   backgroundColor: "magenta",
                   position: "absolute",

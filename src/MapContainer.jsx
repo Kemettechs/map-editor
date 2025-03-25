@@ -287,8 +287,8 @@ export default function MapContainer() {
             >
               <div
                 style={{
-                  width: "2px",
-                  height: "2px",
+                  width: "6px",
+                  height: "6px",
                   borderRadius: "50%",
                   backgroundColor: "magenta",
                   position: "absolute",
