@@ -3,21 +3,6 @@ import { useEffect, useRef } from "react";
 export default function RobotOverlay({ position, rotation, map }) {
   const overlayRef = useRef(null);
 
-  rotation += 90;
-
-  if (
-    rotation == 0 ||
-    rotation == 90 ||
-    rotation == -90 ||
-    rotation == 180 ||
-    rotation == 270
-  ) {
-    rotation = rotation;
-  } else {
-    rotation = rotation + 90;
-  }
-  console.log(rotation);
-
   useEffect(() => {
     if (!map || !position) return;
 
@@ -68,7 +53,7 @@ export default function RobotOverlay({ position, rotation, map }) {
         this.div.style.height = `${heightPx}px`;
         this.div.style.left = `${point.x - widthPx / 2}px`;
         this.div.style.top = `${point.y - heightPx / 2}px`;
-        this.div.style.transform = `rotate(${this.rotation}deg)`;
+        this.div.style.transform = `rotate(${90 - this.rotation}deg)`;
       }
 
       onRemove() {

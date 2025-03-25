@@ -191,40 +191,19 @@ export default function MapContainer() {
 
       if (tempLine.length > 1) {
         let angle = computeAngle(tempLine[tempLine.length - 2], newPoint);
-        // make it to the nearest step of 10 degrees. 
-        angle = Math.round(angle / 10) * 10;
 
         setIconRotation(angle);
-        angle += 90;
 
-        if (
-          angle == 0 ||
-          angle == 90 ||
-          angle == 180 ||
-          angle == -90 ||
-          angle == 270
-        ) {
-          angle = angle;
-        } else {
-          angle = angle + 90;
-        }
-        console.log(angle);
-
-        // Check if movement is more along X-axis or Y-axis
-        let dx = Math.abs(newPoint.lng - lastPoint.lng);
-        let dy = Math.abs(newPoint.lat - lastPoint.lat);
-
-        // If moving along Y-axis, add 180 degrees
-        if (dy > dx) {
-          angle += 180;
-        }
-
-        let generatedSegment = generateGeoPath(newPoint, angle - 90, "right");
+        let generatedSegment = generateGeoPath(
+          newPoint,
+          180 - angle + 180,
+          "right"
+        );
 
         // Update the generated line separately, not modifying tempLine
         setGeneratedLine([...generatedSegment]);
 
-        let generatedSegment2 = generateGeoPath(newPoint, angle + 90, "left"); // Mirror but keep it aligned
+        let generatedSegment2 = generateGeoPath(newPoint, 180 - angle, "left"); // Mirror but keep it aligned
         setGeneratedLine2([...generatedSegment2]);
       }
 
@@ -360,7 +339,7 @@ export default function MapContainer() {
             <Polyline
               path={generatedLine2}
               options={{
-                strokeColor: "#FFFF",
+                strokeColor: "#fff",
                 strokeWeight: 2,
                 // strokeDasharray: [5, 5],
               }}
