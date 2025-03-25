@@ -191,6 +191,9 @@ export default function MapContainer() {
 
       if (tempLine.length > 1) {
         let angle = computeAngle(tempLine[tempLine.length - 2], newPoint);
+        // make it to the nearest step of 10 degrees. 
+        angle = Math.round(angle / 10) * 10;
+
         setIconRotation(angle);
         angle += 90;
 
