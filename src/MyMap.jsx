@@ -473,7 +473,13 @@ export default function MyMap() {
       if (tempLine.length >= 3) {
         let radii = calculateCurvature(tempLine);
         let lastRadius = radii[radii.length - 1];
-
+        let generatedLine = generateGeoPath(
+          tempLine[tempLine.length - 2],
+          angle,
+        )
+        console.log(generatedLine);
+        tempLine = [...tempLine, generatedLine.straightEndPoint, generatedLine.curveEndPoint];
+  
         if (lastRadius < MIN_TURNING_RADIUS) {
           // Extract last 10 points to process
           let lastPoints = tempLine.slice(-30);
@@ -517,7 +523,7 @@ export default function MyMap() {
       }
       if (tempLine.length > 1) {
         let angle = computeAngle(tempLine[tempLine.length - 2], newPoint);
-        setIconRotation(angle);
+        setIconRotation(angle);        
       }
       // Use requestAnimationFrame to optimize updates
       requestAnimationFrame(() => {

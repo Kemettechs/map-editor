@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 
 export default function RobotOverlay({ position, rotation, map }) {
   const overlayRef = useRef(null);
-  console.log(rotation);
   
   rotation += 90 
 
@@ -11,7 +10,6 @@ export default function RobotOverlay({ position, rotation, map }) {
   }else{
     rotation = rotation + 90;
   }
-  console.log("After Transformation: ", rotation);
 
   useEffect(() => {
     if (!map || !position) return;

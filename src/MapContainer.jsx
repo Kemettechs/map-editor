@@ -50,7 +50,49 @@ export default function MapContainer() {
   const [iconPosition, setIconPosition] = useState(null);
   const [iconRotation, setIconRotation] = useState(0);
   const [paths, setPaths] = useState([]);
-
+  function generateGeoPath(startPoint, angle, straightLength = 1.8, curveRadius = 3.2, numCurvePoints = 20) {
+    // Earth's radius in kilometers
+    const EARTH_RADIUS = 6371;
+    
+    // Convert angle to radians
+    const angleRad = angle * (Math.PI / 180);
+    
+    // Convert lengths to kilometers
+    const straightLengthKm = straightLength / 1000;
+    const curveRadiusKm = curveRadius / 1000; // convert meters to kilometers
+    
+    // Calculate points array
+    const points = [];
+    
+    // Add start point
+    points.push(startPoint);
+    
+    // Calculate straight line end point
+    const straightEndLat = startPoint.lat + (straightLengthKm / EARTH_RADIUS) * 
+      Math.cos(angleRad) * (180 / Math.PI);
+    const straightEndLng = startPoint.lng + (straightLengthKm / EARTH_RADIUS) * 
+      Math.sin(angleRad) / Math.cos(startPoint.lat * (Math.PI / 180)) * (180 / Math.PI);
+    
+    // Add straight line end point
+    points.push({ lat: straightEndLat, lng: straightEndLng });
+    
+    // Determine curve direction (90 degrees from straight line)
+    const curveAngle = angle;
+    const curveAngleRad = curveAngle * (Math.PI / 180);
+    
+    // Generate points along the curve
+    for (let i = 1; i <= numCurvePoints; i++) {
+      const t = i / numCurvePoints;
+      const curvePointLat = straightEndLat + (curveRadiusKm / EARTH_RADIUS) * 
+        Math.cos(curveAngleRad + Math.PI * t) * (180 / Math.PI);
+      const curvePointLng = straightEndLng + (curveRadiusKm / EARTH_RADIUS) * 
+        Math.sin(curveAngleRad + Math.PI * t) / Math.cos(straightEndLat * (Math.PI / 180)) * (180 / Math.PI);
+      
+      points.push({ lat: curvePointLat, lng: curvePointLng });
+    }
+    
+    return points;
+  }  
   // Update bounds based on zoom level
   const updateBounds = () => {
     if (!mapRef.current) return;
@@ -129,6 +171,14 @@ export default function MapContainer() {
       if (tempLine.length > 1) {
         let angle = computeAngle(tempLine[tempLine.length - 2], newPoint);
         setIconRotation(angle);
+        console.log(tempLine[tempLine.length - 1], angle);
+        let generatedLine = generateGeoPath(
+          tempLine[tempLine.length - 1],
+          angle,
+        )
+        console.log(generatedLine);
+        tempLine = [...tempLine, ...generatedLine];
+
       }
 
       requestAnimationFrame(() => {
