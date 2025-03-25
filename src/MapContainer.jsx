@@ -50,49 +50,70 @@ export default function MapContainer() {
   const [iconPosition, setIconPosition] = useState(null);
   const [iconRotation, setIconRotation] = useState(0);
   const [paths, setPaths] = useState([]);
-  function generateGeoPath(startPoint, angle, straightLength = 1.8, curveRadius = 3.2, numCurvePoints = 20) {
-    // Earth's radius in kilometers
-    const EARTH_RADIUS = 6371;
-    
-    // Convert angle to radians
+  const [generatedLine, setGeneratedLine] = useState([]); // Auto-generated path
+  const [generatedLine2, setGeneratedLine2] = useState([]); // Auto-generated path
+
+  function generateGeoPath(
+    startPoint,
+    angle,
+    turnDirection = "right", // "left" or "right"
+    straightLength = 0.000001,
+    curveRadius = 3.2,
+    numCurvePoints = 100 // Full curve points
+  ) {
+    const EARTH_RADIUS = 6371; // Earth's radius in km
     const angleRad = angle * (Math.PI / 180);
-    
-    // Convert lengths to kilometers
+
+    // Convert distances to km
     const straightLengthKm = straightLength / 1000;
-    const curveRadiusKm = curveRadius / 1000; // convert meters to kilometers
-    
-    // Calculate points array
-    const points = [];
-    
-    // Add start point
-    points.push(startPoint);
-    
-    // Calculate straight line end point
-    const straightEndLat = startPoint.lat + (straightLengthKm / EARTH_RADIUS) * 
-      Math.cos(angleRad) * (180 / Math.PI);
-    const straightEndLng = startPoint.lng + (straightLengthKm / EARTH_RADIUS) * 
-      Math.sin(angleRad) / Math.cos(startPoint.lat * (Math.PI / 180)) * (180 / Math.PI);
-    
-    // Add straight line end point
+    const curveRadiusKm = curveRadius / 1000;
+
+    // Store points
+    const points = [startPoint];
+
+    // Compute straight line endpoint
+    const straightEndLat =
+      startPoint.lat +
+      (straightLengthKm / EARTH_RADIUS) * Math.cos(angleRad) * (180 / Math.PI);
+    const straightEndLng =
+      startPoint.lng +
+      (straightLengthKm / EARTH_RADIUS) * Math.sin(angleRad) * (180 / Math.PI);
+
     points.push({ lat: straightEndLat, lng: straightEndLng });
-    
-    // Determine curve direction (90 degrees from straight line)
-    const curveAngle = angle;
-    const curveAngleRad = curveAngle * (Math.PI / 180);
-    
-    // Generate points along the curve
+
+    // 🔹 Correct curve direction based on movement
+    let curveStartAngleRad = angleRad;
+    if (turnDirection === "left") {
+      curveStartAngleRad -= Math.PI / 2; // Adjust for left turns
+    } else {
+      curveStartAngleRad += Math.PI / 2; // Adjust for right turns
+    }
+
+    // 🔹 Generate **half** curve points
     for (let i = 1; i <= numCurvePoints; i++) {
+      // ✅ Only half of the curve
       const t = i / numCurvePoints;
-      const curvePointLat = straightEndLat + (curveRadiusKm / EARTH_RADIUS) * 
-        Math.cos(curveAngleRad + Math.PI * t) * (180 / Math.PI);
-      const curvePointLng = straightEndLng + (curveRadiusKm / EARTH_RADIUS) * 
-        Math.sin(curveAngleRad + Math.PI * t) / Math.cos(straightEndLat * (Math.PI / 180)) * (180 / Math.PI);
-      
+      const curveAngleRad =
+        curveStartAngleRad +
+        (turnDirection === "left" ? -1 : 1) * (Math.PI / 2) * t; // ✅ Half of π/2
+
+      const curvePointLat =
+        straightEndLat +
+        (curveRadiusKm / EARTH_RADIUS) *
+          Math.cos(curveAngleRad) *
+          (180 / Math.PI);
+      const curvePointLng =
+        straightEndLng +
+        (curveRadiusKm / EARTH_RADIUS) *
+          Math.sin(curveAngleRad) *
+          (180 / Math.PI);
+
       points.push({ lat: curvePointLat, lng: curvePointLng });
     }
-    
+
     return points;
-  }  
+  }
+
   // Update bounds based on zoom level
   const updateBounds = () => {
     if (!mapRef.current) return;
@@ -171,14 +192,37 @@ export default function MapContainer() {
       if (tempLine.length > 1) {
         let angle = computeAngle(tempLine[tempLine.length - 2], newPoint);
         setIconRotation(angle);
-        console.log(tempLine[tempLine.length - 1], angle);
-        let generatedLine = generateGeoPath(
-          tempLine[tempLine.length - 1],
-          angle,
-        )
-        console.log(generatedLine);
-        tempLine = [...tempLine, ...generatedLine];
+        angle += 90;
 
+        if (
+          angle == 0 ||
+          angle == 90 ||
+          angle == 180 ||
+          angle == -90 ||
+          angle == 270
+        ) {
+          angle = angle;
+        } else {
+          angle = angle + 90;
+        }
+        console.log(angle);
+
+        // Check if movement is more along X-axis or Y-axis
+        let dx = Math.abs(newPoint.lng - lastPoint.lng);
+        let dy = Math.abs(newPoint.lat - lastPoint.lat);
+
+        // If moving along Y-axis, add 180 degrees
+        if (dy > dx) {
+          angle += 180;
+        }
+
+        let generatedSegment = generateGeoPath(newPoint, angle - 90, "right");
+
+        // Update the generated line separately, not modifying tempLine
+        setGeneratedLine([...generatedSegment]);
+
+        let generatedSegment2 = generateGeoPath(newPoint, angle + 90, "left"); // Mirror but keep it aligned
+        setGeneratedLine2([...generatedSegment2]);
       }
 
       requestAnimationFrame(() => {
@@ -194,6 +238,8 @@ export default function MapContainer() {
       setLines((prev) => [...prev, currentLine]);
     }
     setCurrentLine([]);
+    setGeneratedLine([]);
+    setGeneratedLine2([]);
     setIsMouseDown(false);
     setIconPosition(null);
   };
@@ -294,6 +340,27 @@ export default function MapContainer() {
             <Polyline
               path={currentLine}
               options={{ strokeColor: "#FF0000", strokeWeight: 2 }}
+            />
+          )}
+          {/* Render generated path separately */}
+          {generatedLine.length > 1 && (
+            <Polyline
+              path={generatedLine}
+              options={{
+                strokeColor: "#FFF",
+                strokeWeight: 2,
+                // strokeDasharray: [5, 5],
+              }}
+            />
+          )}
+          {generatedLine2.length > 1 && (
+            <Polyline
+              path={generatedLine2}
+              options={{
+                strokeColor: "#FFFF",
+                strokeWeight: 2,
+                // strokeDasharray: [5, 5],
+              }}
             />
           )}
 

@@ -2,14 +2,21 @@ import { useEffect, useRef } from "react";
 
 export default function RobotOverlay({ position, rotation, map }) {
   const overlayRef = useRef(null);
-  
-  rotation += 90 
 
-  if(rotation == 0 || rotation == 90 || rotation == 180 || rotation == 270){
+  rotation += 90;
+
+  if (
+    rotation == 0 ||
+    rotation == 90 ||
+    rotation == -90 ||
+    rotation == 180 ||
+    rotation == 270
+  ) {
     rotation = rotation;
-  }else{
+  } else {
     rotation = rotation + 90;
   }
+  console.log(rotation);
 
   useEffect(() => {
     if (!map || !position) return;
