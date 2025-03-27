@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 export default function RobotOverlay({ position, rotation, map }) {
   const overlayRef = useRef(null);
 
+  
   useEffect(() => {
     if (!map || !position) return;
 
