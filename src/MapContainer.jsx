@@ -18,6 +18,7 @@ import {
   cartesianToLatlng,
   computeAngle,
 } from "./pathUtils";
+import { Portal } from '@mantine/core';
 
 const libraries = ["places", "geometry"];
 const mapContainerStyle = { width: "100%", height: "100vh" };
@@ -215,7 +216,17 @@ export default function MapContainer() {
       });
     }
   };
-
+  
+  document.addEventListener('keydown', (event) => {
+    if (event.code === 'Space') {
+      // Prevent default spacebar behavior
+      event.preventDefault();
+      
+      // Toggle the isDrawing value
+      setIsDrawing(!isDrawing);
+      }
+  });
+  
   const handleMouseUp = () => {
     if (isMouseDown && currentLine.length > 1) {
       setLines((prev) => [...prev, currentLine]);
@@ -238,7 +249,7 @@ export default function MapContainer() {
       gestureHandling: isDrawing ? "none" : "auto",
       disableDefaultUI: true,
       zoomControl: true,
-      fullscreenControl: true,
+      fullscreenControl: false,
       mapTypeControl: true,
       mapTypeId: "satellite",
     });
@@ -272,7 +283,7 @@ export default function MapContainer() {
             disableDefaultUI: true,
             mapTypeId: "satellite",
             zoomControl: true,
-            fullscreenControl: true,
+            fullscreenControl: false,
             mapTypeControl: true,
           }}
           mapContainerStyle={mapContainerStyle}
@@ -395,27 +406,29 @@ export default function MapContainer() {
       </p>
 
       {/* Controls */}
-      <MapControls
-        isDrawing={isDrawing}
-        toggleDrawing={() => setIsDrawing(!isDrawing)}
-        undoLastDrawing={() => {
-          if (lines.length === 0) return;
-          const newLines = [...lines];
-          newLines.pop();
-          setLines(newLines);
-          setCurrentLength(
-            newLines.length > 0
-              ? computeLineLength(newLines[newLines.length - 1])
-              : 0
-          );
-        }}
-        setPoints={setPoints}
-        setPaths={setPaths}
-        mapRef={mapRef}
-        lines={lines}
-        setCurrentLength={setCurrentLength}
-        setLines={setLines}
-      />
+      <Portal>
+        <MapControls
+          isDrawing={isDrawing}
+          toggleDrawing={() => setIsDrawing(!isDrawing)}
+          undoLastDrawing={() => {
+            if (lines.length === 0) return;
+            const newLines = [...lines];
+            newLines.pop();
+            setLines(newLines);
+            setCurrentLength(
+              newLines.length > 0
+                ? computeLineLength(newLines[newLines.length - 1])
+                : 0
+            );
+          }}
+          setPoints={setPoints}
+          setPaths={setPaths}
+          mapRef={mapRef}
+          lines={lines}
+          setCurrentLength={setCurrentLength}
+          setLines={setLines}
+        />
+      </Portal>
 
       <ToastContainer />
     </div>

@@ -4,9 +4,11 @@ import {
   IconPaint,
   IconReload,
   IconUpload,
+  IconMaximize,
+  IconMinimize
 } from "@tabler/icons-react";
 import Papa from "papaparse";
-import { useRef } from "react";
+import { useRef, useEffect, useState } from "react";
 import { computeLineLength } from "./pathUtils";
 
 export default function MapControls({
@@ -23,6 +25,56 @@ export default function MapControls({
   const fileInputRef = useRef(null);
   const fileInputRefEndPoints = useRef(null);
   const fileInputRefPerimeter = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Fullscreen handling
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Fullscreen toggle function
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+      } else if (document.documentElement.mozRequestFullScreen) { // Firefox
+        document.documentElement.mozRequestFullScreen();
+      } else if (document.documentElement.webkitRequestFullscreen) { // Chrome, Safari and Opera
+        document.documentElement.webkitRequestFullscreen();
+      } else if (document.documentElement.msRequestFullscreen) { // IE/Edge
+        document.documentElement.msRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.mozCancelFullScreen) { // Firefox
+        document.mozCancelFullScreen();
+      } else if (document.webkitExitFullscreen) { // Chrome, Safari and Opera
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) { // IE/Edge
+        document.msExitFullscreen();
+      }
+    }
+  };
 
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -170,7 +222,32 @@ export default function MapControls({
 
   return (
     <>
-      <div style={{ position: "absolute", top: 70, right: 5, zIndex: 1000 }}>
+      <div style={{ 
+        position: "fixed", 
+        top: 40, 
+        right: 5, 
+        zIndex: 9999,
+        pointerEvents: 'auto'
+      }}>
+        <Tooltip label="Fullscreen" position="left">
+          <ActionIcon
+            size="md"
+            color="blue"
+            variant="filled"
+            onClick={toggleFullscreen}
+          >
+            {isFullscreen ? <IconMinimize size=".9rem" /> : <IconMaximize size=".9rem" />}
+          </ActionIcon>
+        </Tooltip>
+      </div>
+
+      <div style={{ 
+        position: "fixed", 
+        top: 70, 
+        right: 5, 
+        zIndex: 9999,
+        pointerEvents: 'auto'
+      }}>
         <Tooltip label="Upload Checkpoint" position="left">
           <ActionIcon
             onClick={() => fileInputRef.current?.click()}
@@ -183,7 +260,13 @@ export default function MapControls({
         </Tooltip>
       </div>
 
-      <div style={{ position: "absolute", top: 100, right: 5, zIndex: 1000 }}>
+      <div style={{ 
+        position: "fixed", 
+        top: 100, 
+        right: 5, 
+        zIndex: 9999,
+        pointerEvents: 'auto'
+      }}>
         <Tooltip
           label={isDrawing ? "Stop Drawing" : "Start Drawing"}
           position="left"
@@ -199,7 +282,13 @@ export default function MapControls({
         </Tooltip>
       </div>
 
-      <div style={{ position: "absolute", top: 130, right: 5, zIndex: 1000 }}>
+      <div style={{ 
+        position: "fixed", 
+        top: 130, 
+        right: 5, 
+        zIndex: 9999,
+        pointerEvents: 'auto'
+      }}>
         <Tooltip label="Undo" position="left">
           <ActionIcon
             size="md"
@@ -212,7 +301,13 @@ export default function MapControls({
         </Tooltip>
       </div>
 
-      <div style={{ position: "absolute", top: 160, right: 5, zIndex: 1000 }}>
+      <div style={{ 
+        position: "fixed", 
+        top: 160, 
+        right: 5, 
+        zIndex: 9999,
+        pointerEvents: 'auto'
+      }}>
         <Tooltip label="Download" position="left">
           <ActionIcon
             size="md"
@@ -270,6 +365,7 @@ export default function MapControls({
           Endpoints File
         </Button>
       </Paper>
+
 
       <input
         type="file"
