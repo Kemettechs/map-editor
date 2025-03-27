@@ -173,7 +173,8 @@ export default function MapContainer() {
               (point) => point && isFinite(point.lat) && isFinite(point.lng)
             )
             .map((point) => latlngToCartesian(point.lat, point.lng));
-
+          let utmZone =
+            lastPointsCartesian[lastPointsCartesian.length - 1].utmZone;
           if (lastPointsCartesian.length > 5) {
             lastPointsCartesian = createSmoothBezierCurve(
               lastPointsCartesian,
@@ -183,7 +184,7 @@ export default function MapContainer() {
           }
 
           lastPoints = lastPointsCartesian.map((point) =>
-            cartesianToLatlng(point.x, point.y, 10)
+            cartesianToLatlng(point.x, point.y, utmZone)
           );
           tempLine = [...tempLine.slice(0, -30), ...lastPoints];
         }
