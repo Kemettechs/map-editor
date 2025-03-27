@@ -247,7 +247,15 @@ export default function MapContainer() {
     map.addListener("mousemove", handleMouseMove);
     map.addListener("mouseup", handleMouseUp);
     document.addEventListener("mouseup", handleMouseUp);
-
+    document.addEventListener('keydown', (event) => {
+      if (event.code === 'Space') {
+        // Prevent default spacebar behavior
+        event.preventDefault();
+        
+        // Toggle the isDrawing value
+        setIsDrawing(!isDrawing);
+      }
+    });
     return () => {
       google.maps.event.clearListeners(map, "mousedown");
       google.maps.event.clearListeners(map, "mousemove");
