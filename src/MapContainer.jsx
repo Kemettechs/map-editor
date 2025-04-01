@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback  } from "react";
 import {
   GoogleMap,
   useLoadScript,
@@ -216,17 +216,7 @@ export default function MapContainer() {
       });
     }
   };
-  
-  document.addEventListener('keydown', (event) => {
-    if (event.code === 'Space') {
-      // Prevent default spacebar behavior
-      event.preventDefault();
-      
-      // Toggle the isDrawing value
-      setIsDrawing(!isDrawing);
-      }
-  });
-  
+    
   const handleMouseUp = () => {
     if (isMouseDown && currentLine.length > 1) {
       setLines((prev) => [...prev, currentLine]);
@@ -237,6 +227,17 @@ export default function MapContainer() {
     setIsMouseDown(false);
     setIconPosition(null);
   };
+  const handleKeyDown = useCallback((event) => {
+    // Only handle spacebar key events
+    console.log(event.code);
+    if (event.code === 'Space' && !event.repeat) {
+      // Prevent default scrolling behavior
+      event.preventDefault();
+      console.log(isDrawing);
+      // Toggle the drawing state
+      setIsDrawing(prevState => !prevState);
+    }
+  }, []);
 
   // Attach event listeners
   useEffect(() => {
@@ -258,22 +259,15 @@ export default function MapContainer() {
     map.addListener("mousemove", handleMouseMove);
     map.addListener("mouseup", handleMouseUp);
     document.addEventListener("mouseup", handleMouseUp);
-    document.addEventListener('keydown', (event) => {
-      if (event.code === 'Space') {
-        // Prevent default spacebar behavior
-        event.preventDefault();
-        
-        // Toggle the isDrawing value
-        setIsDrawing(!isDrawing);
-      }
-    });
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
       google.maps.event.clearListeners(map, "mousedown");
       google.maps.event.clearListeners(map, "mousemove");
       google.maps.event.clearListeners(map, "mouseup");
       document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isDrawing, currentLine]);
+  }, [isDrawing, currentLine, handleKeyDown]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
