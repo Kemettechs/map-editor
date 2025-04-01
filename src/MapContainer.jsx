@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback  } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   GoogleMap,
   useLoadScript,
@@ -227,17 +227,16 @@ export default function MapContainer() {
     setIsMouseDown(false);
     setIconPosition(null);
   };
-  const handleKeyDown = useCallback((event) => {
+  const handleKeyDown = (event) => {
     // Only handle spacebar key events
-    console.log(event.code);
-    if (event.code === 'Space' && !event.repeat) {
+    // console.log(event.code);
+    if (event.code === 'Space') {
       // Prevent default scrolling behavior
       event.preventDefault();
-      console.log(isDrawing);
       // Toggle the drawing state
       setIsDrawing(prevState => !prevState);
     }
-  }, []);
+  }
 
   // Attach event listeners
   useEffect(() => {
