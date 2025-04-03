@@ -53,67 +53,129 @@ export default function MapContainer() {
   const [paths, setPaths] = useState([]);
   const [generatedLine, setGeneratedLine] = useState([]); // Auto-generated path
   const [generatedLine2, setGeneratedLine2] = useState([]); // Auto-generated path
+  
+  function generateGeoPath(     
+    startPoint,     
+    angle, // In degrees, clockwise from North (compass bearing)     
+    turnDirection = "right",     
+    boxWidth = 3.2,     
+    curveRadius = 3.2,     
+    numCurvePoints = 200   
+) {      
+    const EARTH_RADIUS = 6371; // Earth's radius in kilometers     
+    const angleRad = angle * (Math.PI / 180); // Convert angle to radians         
 
-  function generateGeoPath(
-    startPoint,
-    angle,
-    turnDirection = "right", // "left" or "right"
-    straightLength = 0.000001,
-    curveRadius = 3.2,
-    numCurvePoints = 100 // Full curve points
-  ) {
-    const EARTH_RADIUS = 6371; // Earth's radius in km
-    const angleRad = angle * (Math.PI / 180);
+    // Convert distances to kilometers     
+    const boxWidthKm = boxWidth / 1000;     
+    const curveRadiusKm = curveRadius / 1000;     
+    const boxLengthKm = 5.5 / 1000; // Box length in km     
+    const points = [];          
 
-    // Convert distances to km
-    const straightLengthKm = straightLength / 1000;
-    const curveRadiusKm = curveRadius / 1000;
+    // Move the starting point to the center of the top border
+    const startLatShift = (boxWidthKm / EARTH_RADIUS) * Math.cos(angleRad) * (180 / Math.PI);
+    const startLngShift = (boxWidthKm / EARTH_RADIUS) * Math.sin(angleRad) * (180 / Math.PI);
 
-    // Store points
-    const points = [startPoint];
+    const startLatShiftUp = (boxLengthKm / EARTH_RADIUS) * Math.sin(angleRad) * (180 / Math.PI);
+    const startLngShiftUp = (boxLengthKm / EARTH_RADIUS) * Math.cos(angleRad) * (180 / Math.PI);
 
-    // Compute straight line endpoint
-    const straightEndLat =
-      startPoint.lat +
-      (straightLengthKm / EARTH_RADIUS) * Math.cos(angleRad) * (180 / Math.PI);
-    const straightEndLng =
-      startPoint.lng +
-      (straightLengthKm / EARTH_RADIUS) * Math.sin(angleRad) * (180 / Math.PI);
+    // New starting point shifted to the top border center (add to the lat/lng)
+    let actualStartLat = startPoint.lat + startLatShift - startLatShiftUp;
+    let actualStartLng = startPoint.lng + startLngShift + startLngShiftUp;
 
-    points.push({ lat: straightEndLat, lng: straightEndLng });
-
-    // 🔹 Correct curve direction based on movement
-    let curveStartAngleRad = angleRad;
-    if (turnDirection === "left") {
-      curveStartAngleRad -= Math.PI / 2; // Adjust for left turns
-    } else {
-      curveStartAngleRad += Math.PI / 2; // Adjust for right turns
+    if (turnDirection == "left") {
+      console.log("left");
+      actualStartLat = startPoint.lat - startLatShift - startLatShiftUp;
+      actualStartLng = startPoint.lng - startLngShift + startLngShiftUp;
     }
+    const actualStart = { lat: actualStartLat, lng: actualStartLng };
 
-    // 🔹 Generate **half** curve points
-    for (let i = 1; i <= numCurvePoints; i++) {
-      // ✅ Only half of the curve
-      const t = i / numCurvePoints;
-      const curveAngleRad =
-        curveStartAngleRad +
-        (turnDirection === "left" ? -1 : 1) * (Math.PI / 2) * t; // ✅ Half of π/2
+    // Calculate center position (perpendicular to travel direction)     
+    const directionAngleRad = turnDirection === "left"     
+        ? angleRad - Math.PI/2     
+        : angleRad - Math.PI/2;        
 
-      const curvePointLat =
-        straightEndLat +
-        (curveRadiusKm / EARTH_RADIUS) *
-          Math.cos(curveAngleRad) *
-          (180 / Math.PI);
-      const curvePointLng =
-        straightEndLng +
-        (curveRadiusKm / EARTH_RADIUS) *
-          Math.sin(curveAngleRad) *
-          (180 / Math.PI);
+    const centerLat = actualStart.lat +        
+        (curveRadiusKm / EARTH_RADIUS) * Math.cos(directionAngleRad) * (180 / Math.PI);     
+    const centerLng = actualStart.lng +        
+        (curveRadiusKm / EARTH_RADIUS) * Math.sin(directionAngleRad) * (180 / Math.PI);        
 
-      points.push({ lat: curvePointLat, lng: curvePointLng });
-    }
+    // Generate half-circle points (correct angle progression)     
+    const startAngle = directionAngleRad + (turnDirection === "left" ? Math.PI/2 : -Math.PI/2);     
+    const angleStep = (Math.PI) / numCurvePoints * (turnDirection === "left" ? 1 : -1);        
 
-    return points;
-  }
+    for (let i = 0; i <= numCurvePoints; i++) {       
+        const currentAngle = startAngle + angleStep * i;             
+
+        const curvePointLat = centerLat +          
+            (curveRadiusKm / EARTH_RADIUS) * Math.cos(currentAngle) * (180 / Math.PI);       
+        const curvePointLng = centerLng +          
+            (curveRadiusKm / EARTH_RADIUS) * Math.sin(currentAngle) * (180 / Math.PI);             
+
+        points.push({ lat: curvePointLat, lng: curvePointLng });     
+    }        
+
+    return points; 
+}
+  // function generateGeoPath(
+  //   startPoint,
+  //   angle,
+  //   turnDirection = "right", // "left" or "right"
+  //   straightLength = 2.1,
+  //   curveRadius = 3.2,
+  //   numCurvePoints = 200 // Full curve points
+  // ) {
+  //   const EARTH_RADIUS = 6371; // Earth's radius in km
+  //   const angleRad = -1 * angle * (Math.PI / 180);
+
+  //   // Convert distances to km
+  //   const straightLengthKm = straightLength / 1000;
+  //   const curveRadiusKm = curveRadius / 1000;
+
+  //   // Store points
+  //   const points = [startPoint];
+
+  //   // Compute straight line endpoint
+  //   const straightEndLat =
+  //     startPoint.lat +
+  //     (straightLengthKm / EARTH_RADIUS) * Math.sin(angleRad) * (180 / Math.PI);
+  //   const straightEndLng =
+  //     startPoint.lng +
+  //     (straightLengthKm / EARTH_RADIUS) * Math.cos(angleRad) * (180 / Math.PI);
+
+  //   points.push({ lat: straightEndLat, lng: straightEndLng });
+
+  //   // 🔹 Correct curve direction based on movement
+  //   let curveStartAngleRad = angleRad;
+  //   if (turnDirection === "left") {
+  //     curveStartAngleRad -= Math.PI / 2; // Adjust for left turns
+  //   } else {
+  //     curveStartAngleRad += Math.PI / 2; // Adjust for right turns
+  //   }
+
+  //   // 🔹 Generate **half** curve points
+  //   for (let i = 1; i <= numCurvePoints; i++) {
+  //     // ✅ Only half of the curve
+  //     const t = i / numCurvePoints;
+  //     const curveAngleRad =
+  //       curveStartAngleRad +
+  //       (turnDirection === "left" ? -1 : 1) * (Math.PI / 2) * t; // ✅ Half of π/2
+
+  //     const curvePointLat =
+  //       straightEndLat +
+  //       (curveRadiusKm / EARTH_RADIUS) *
+  //         Math.cos(curveAngleRad) *
+  //         (180 / Math.PI);
+  //     const curvePointLng =
+  //       straightEndLng +
+  //       (curveRadiusKm / EARTH_RADIUS) *
+  //         Math.sin(curveAngleRad) *
+  //         (180 / Math.PI);
+
+  //     points.push({ lat: curvePointLat, lng: curvePointLng });
+  //   }
+
+  //   return points;
+  // }
 
   // Update bounds based on zoom level
   const updateBounds = () => {
@@ -201,11 +263,10 @@ export default function MapContainer() {
           180 - angle + 180,
           "right"
         );
-
         // Update the generated line separately, not modifying tempLine
         setGeneratedLine([...generatedSegment]);
 
-        let generatedSegment2 = generateGeoPath(newPoint, 180 - angle, "left"); // Mirror but keep it aligned
+        let generatedSegment2 = generateGeoPath(newPoint, 180 - angle + 180, "left"); // Mirror but keep it aligned
         setGeneratedLine2([...generatedSegment2]);
       }
 
