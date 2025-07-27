@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react";
+import React from "react";
+
 import {
   GoogleMap,
   useLoadScript,
@@ -18,7 +20,7 @@ import {
   cartesianToLatlng,
   computeAngle,
 } from "./pathUtils";
-import { Portal } from '@mantine/core';
+import { Portal } from "@mantine/core";
 
 const libraries = ["places", "geometry"];
 const mapContainerStyle = { width: "100%", height: "100vh" };
@@ -28,7 +30,7 @@ const realHeightMeters = 4.5;
 const metersPerDegreeLat = 101320 * Math.cos((center.lat * Math.PI) / 180);
 const metersPerDegreeLng = 101320 * Math.cos((center.lat * Math.PI) / 180);
 const MIN_TURNING_RADIUS = 10;
-const distanceBetweenTwoPoint = 0.1;
+const distanceBetweenTwoPoint = 0.2;
 const segments = 5;
 const smoothness = 0.5;
 
@@ -53,30 +55,34 @@ export default function MapContainer() {
   const [paths, setPaths] = useState([]);
   const [generatedLine, setGeneratedLine] = useState([]); // Auto-generated path
   const [generatedLine2, setGeneratedLine2] = useState([]); // Auto-generated path
-  
-  function generateGeoPath(     
-    startPoint,     
-    angle, // In degrees, clockwise from North (compass bearing)     
-    turnDirection = "right",     
-    boxWidth = 3.2,     
-    curveRadius = 3.2,     
-    numCurvePoints = 200   
-) {      
-    const EARTH_RADIUS = 6371; // Earth's radius in kilometers     
-    const angleRad = angle * (Math.PI / 180); // Convert angle to radians         
 
-    // Convert distances to kilometers     
-    const boxWidthKm = boxWidth / 1000;     
-    const curveRadiusKm = curveRadius / 1000;     
-    const boxLengthKm = 5.5 / 1000; // Box length in km     
-    const points = [];          
+  function generateGeoPath(
+    startPoint,
+    angle, // In degrees, clockwise from North (compass bearing)
+    turnDirection = "right",
+    boxWidth = 3.2,
+    curveRadius = 3.2,
+    numCurvePoints = 200
+  ) {
+    const EARTH_RADIUS = 6371; // Earth's radius in kilometers
+    const angleRad = angle * (Math.PI / 180); // Convert angle to radians
+
+    // Convert distances to kilometers
+    const boxWidthKm = boxWidth / 1000;
+    const curveRadiusKm = curveRadius / 1000;
+    const boxLengthKm = 5.5 / 1000; // Box length in km
+    const points = [];
 
     // Move the starting point to the center of the top border
-    const startLatShift = (boxWidthKm / EARTH_RADIUS) * Math.cos(angleRad) * (180 / Math.PI);
-    const startLngShift = (boxWidthKm / EARTH_RADIUS) * Math.sin(angleRad) * (180 / Math.PI);
+    const startLatShift =
+      (boxWidthKm / EARTH_RADIUS) * Math.cos(angleRad) * (180 / Math.PI);
+    const startLngShift =
+      (boxWidthKm / EARTH_RADIUS) * Math.sin(angleRad) * (180 / Math.PI);
 
-    const startLatShiftUp = (boxLengthKm / EARTH_RADIUS) * Math.sin(angleRad) * (180 / Math.PI);
-    const startLngShiftUp = (boxLengthKm / EARTH_RADIUS) * Math.cos(angleRad) * (180 / Math.PI);
+    const startLatShiftUp =
+      (boxLengthKm / EARTH_RADIUS) * Math.sin(angleRad) * (180 / Math.PI);
+    const startLngShiftUp =
+      (boxLengthKm / EARTH_RADIUS) * Math.cos(angleRad) * (180 / Math.PI);
 
     // New starting point shifted to the top border center (add to the lat/lng)
     let actualStartLat = startPoint.lat + startLatShift - startLatShiftUp;
@@ -89,33 +95,49 @@ export default function MapContainer() {
     }
     const actualStart = { lat: actualStartLat, lng: actualStartLng };
 
-    // Calculate center position (perpendicular to travel direction)     
-    const directionAngleRad = turnDirection === "left"     
-        ? angleRad - Math.PI/2     
-        : angleRad - Math.PI/2;        
+    // Calculate center position (perpendicular to travel direction)
+    const directionAngleRad =
+      turnDirection === "left"
+        ? angleRad - Math.PI / 2
+        : angleRad - Math.PI / 2;
 
-    const centerLat = actualStart.lat +        
-        (curveRadiusKm / EARTH_RADIUS) * Math.cos(directionAngleRad) * (180 / Math.PI);     
-    const centerLng = actualStart.lng +        
-        (curveRadiusKm / EARTH_RADIUS) * Math.sin(directionAngleRad) * (180 / Math.PI);        
+    const centerLat =
+      actualStart.lat +
+      (curveRadiusKm / EARTH_RADIUS) *
+        Math.cos(directionAngleRad) *
+        (180 / Math.PI);
+    const centerLng =
+      actualStart.lng +
+      (curveRadiusKm / EARTH_RADIUS) *
+        Math.sin(directionAngleRad) *
+        (180 / Math.PI);
 
-    // Generate half-circle points (correct angle progression)     
-    const startAngle = directionAngleRad + (turnDirection === "left" ? Math.PI/2 : -Math.PI/2);     
-    const angleStep = (Math.PI) / numCurvePoints * (turnDirection === "left" ? 1 : -1);        
+    // Generate half-circle points (correct angle progression)
+    const startAngle =
+      directionAngleRad +
+      (turnDirection === "left" ? Math.PI / 2 : -Math.PI / 2);
+    const angleStep =
+      (Math.PI / numCurvePoints) * (turnDirection === "left" ? 1 : -1);
 
-    for (let i = 0; i <= numCurvePoints; i++) {       
-        const currentAngle = startAngle + angleStep * i;             
+    for (let i = 0; i <= numCurvePoints; i++) {
+      const currentAngle = startAngle + angleStep * i;
 
-        const curvePointLat = centerLat +          
-            (curveRadiusKm / EARTH_RADIUS) * Math.cos(currentAngle) * (180 / Math.PI);       
-        const curvePointLng = centerLng +          
-            (curveRadiusKm / EARTH_RADIUS) * Math.sin(currentAngle) * (180 / Math.PI);             
+      const curvePointLat =
+        centerLat +
+        (curveRadiusKm / EARTH_RADIUS) *
+          Math.cos(currentAngle) *
+          (180 / Math.PI);
+      const curvePointLng =
+        centerLng +
+        (curveRadiusKm / EARTH_RADIUS) *
+          Math.sin(currentAngle) *
+          (180 / Math.PI);
 
-        points.push({ lat: curvePointLat, lng: curvePointLng });     
-    }        
+      points.push({ lat: curvePointLat, lng: curvePointLng });
+    }
 
-    return points; 
-}
+    return points;
+  }
   // function generateGeoPath(
   //   startPoint,
   //   angle,
@@ -212,72 +234,88 @@ export default function MapContainer() {
     setIconPosition(startPoint);
   };
 
+  // Throttle logic outside component scope
+  let lastUpdateTime = 0;
+  const THROTTLE_MS = 16; // ~60fps
+
   const handleMouseMove = (e) => {
     if (!isDrawing || !isMouseDown) return;
 
-    let newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    let lastPoint = currentLine[currentLine.length - 1];
-    let distanceBetweenPoints =
+    const now = performance.now();
+    if (now - lastUpdateTime < THROTTLE_MS) return;
+    lastUpdateTime = now;
+
+    const newPoint = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+    const lastPoint = currentLine[currentLine.length - 1];
+
+    const distanceBetweenPoints =
       computeLineLength([lastPoint, newPoint]) / 3.281;
 
-    if (distanceBetweenPoints > distanceBetweenTwoPoint) {
-      let tempLine = [...currentLine, newPoint];
+    if (distanceBetweenPoints <= distanceBetweenTwoPoint) return;
 
-      if (tempLine.length >= 3) {
-        let radii = calculateCurvature(tempLine);
-        let lastRadius = radii[radii.length - 1];
+    const tempLine = [...currentLine, newPoint];
+    let updatedLine = tempLine;
 
-        if (lastRadius < MIN_TURNING_RADIUS) {
-          let lastPoints = tempLine.slice(-30);
-          lastPoints = filterPointsByDistance(lastPoints);
+    if (tempLine.length >= 3) {
+      const radii = calculateCurvature(tempLine);
+      const lastRadius = radii[radii.length - 1];
 
-          let lastPointsCartesian = lastPoints
-            .filter(
-              (point) => point && isFinite(point.lat) && isFinite(point.lng)
-            )
-            .map((point) => latlngToCartesian(point.lat, point.lng));
-          let utmZone =
-            lastPointsCartesian[lastPointsCartesian.length - 1].utmZone;
-          if (lastPointsCartesian.length > 5) {
-            lastPointsCartesian = createSmoothBezierCurve(
-              lastPointsCartesian,
-              segments,
-              smoothness
-            );
-          }
+      if (lastRadius < MIN_TURNING_RADIUS) {
+        let lastPoints = tempLine.slice(-30);
+        lastPoints = filterPointsByDistance(lastPoints);
 
-          lastPoints = lastPointsCartesian.map((point) =>
-            cartesianToLatlng(point.x, point.y, utmZone)
+        let lastPointsCartesian = lastPoints
+          .filter((p) => p && isFinite(p.lat) && isFinite(p.lng))
+          .map((p) => latlngToCartesian(p.lat, p.lng));
+
+        const utmZone = lastPointsCartesian.at(-1)?.utmZone;
+
+        if (lastPointsCartesian.length > 5) {
+          lastPointsCartesian = createSmoothBezierCurve(
+            lastPointsCartesian,
+            segments,
+            smoothness
           );
-          tempLine = [...tempLine.slice(0, -30), ...lastPoints];
         }
-      }
 
-      if (tempLine.length > 1) {
-        let angle = computeAngle(tempLine[tempLine.length - 2], newPoint);
-
-        setIconRotation(angle);
-
-        let generatedSegment = generateGeoPath(
-          newPoint,
-          180 - angle + 180,
-          "right"
+        lastPoints = lastPointsCartesian.map((p) =>
+          cartesianToLatlng(p.x, p.y, utmZone)
         );
-        // Update the generated line separately, not modifying tempLine
-        setGeneratedLine([...generatedSegment]);
 
-        let generatedSegment2 = generateGeoPath(newPoint, 180 - angle + 180, "left"); // Mirror but keep it aligned
-        setGeneratedLine2([...generatedSegment2]);
+        updatedLine = [...tempLine.slice(0, -30), ...lastPoints];
       }
-
-      requestAnimationFrame(() => {
-        setCurrentLine(tempLine);
-        setIconPosition(newPoint);
-        setCurrentLength(computeLineLength(tempLine));
-      });
     }
+
+    if (updatedLine.length > 1) {
+      const angle = computeAngle(updatedLine.at(-2), newPoint);
+      setIconRotation(angle);
+
+      // Avoid unnecessary state updates
+      const gen1 = generateGeoPath(newPoint, 180 - angle + 180, "right");
+      const gen2 = generateGeoPath(newPoint, 180 - angle + 180, "left");
+      setGeneratedLine(gen1);
+      setGeneratedLine2(gen2);
+    }
+
+    requestAnimationFrame(() => {
+      setCurrentLine(updatedLine);
+      setIconPosition(newPoint);
+      setCurrentLength(computeLineLength(updatedLine));
+    });
   };
-    
+
+  const MemoPolyline = React.memo(({ path, color }) => (
+    <Polyline
+      path={path}
+      options={{
+        strokeColor: color,
+        strokeWeight: 2,
+        clickable: false,
+        zIndex: 1, // ensure red line appears above
+      }}
+    />
+  ));
+
   const handleMouseUp = () => {
     if (isMouseDown && currentLine.length > 1) {
       setLines((prev) => [...prev, currentLine]);
@@ -291,13 +329,13 @@ export default function MapContainer() {
   const handleKeyDown = (event) => {
     // Only handle spacebar key events
     // console.log(event.code);
-    if (event.code === 'Space') {
+    if (event.code === "Space") {
       // Prevent default scrolling behavior
       event.preventDefault();
       // Toggle the drawing state
-      setIsDrawing(prevState => !prevState);
+      setIsDrawing((prevState) => !prevState);
     }
-  }
+  };
 
   // Attach event listeners
   useEffect(() => {
@@ -319,13 +357,13 @@ export default function MapContainer() {
     map.addListener("mousemove", handleMouseMove);
     map.addListener("mouseup", handleMouseUp);
     document.addEventListener("mouseup", handleMouseUp);
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
       google.maps.event.clearListeners(map, "mousedown");
       google.maps.event.clearListeners(map, "mousemove");
       google.maps.event.clearListeners(map, "mouseup");
       document.removeEventListener("mouseup", handleMouseUp);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isDrawing, currentLine, handleKeyDown]);
 
@@ -384,40 +422,27 @@ export default function MapContainer() {
             />
           ))}
 
-          {lines.map((path, idx) => (
-            <Polyline
-              key={idx}
-              path={path}
-              options={{ strokeColor: "#7CFC00", strokeWeight: 2 }}
-            />
+          {lines.map((line, idx) => (
+            <MemoPolyline key={idx} path={line} color="#7CFC00" />
           ))}
-
           {currentLine.length > 1 && (
             <Polyline
               path={currentLine}
-              options={{ strokeColor: "#FF0000", strokeWeight: 2 }}
+              options={{
+                strokeColor: "#FF0000",
+                strokeWeight: 2,
+                clickable: false,
+                zIndex: 2, // on top of green lines
+              }}
             />
           )}
+
           {/* Render generated path separately */}
           {generatedLine.length > 1 && (
-            <Polyline
-              path={generatedLine}
-              options={{
-                strokeColor: "#FFF",
-                strokeWeight: 2,
-                // strokeDasharray: [5, 5],
-              }}
-            />
+            <MemoPolyline path={generatedLine} color="#FFFFFF" />
           )}
           {generatedLine2.length > 1 && (
-            <Polyline
-              path={generatedLine2}
-              options={{
-                strokeColor: "#fff",
-                strokeWeight: 2,
-                // strokeDasharray: [5, 5],
-              }}
-            />
+            <MemoPolyline path={generatedLine2} color="#FFFFFF" />
           )}
 
           {iconPosition && (

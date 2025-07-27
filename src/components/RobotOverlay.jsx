@@ -3,7 +3,6 @@ import { useEffect, useRef } from "react";
 export default function RobotOverlay({ position, rotation, map }) {
   const overlayRef = useRef(null);
 
-  
   useEffect(() => {
     if (!map || !position) return;
 
@@ -25,6 +24,7 @@ export default function RobotOverlay({ position, rotation, map }) {
         this.div.style.width = "100%";
         this.div.style.height = "100%";
         this.div.style.backgroundColor = "pink"; // Change color as needed
+        this.div.style.zIndex = 20000; // Change color as needed
         this.div.style.border = "1px solid black"; // Border for visibility
 
         this.getPanes().overlayLayer.appendChild(this.div);
