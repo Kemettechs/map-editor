@@ -19,13 +19,12 @@ export default function RobotOverlay({ position, rotation, map }) {
         this.div.style.position = "absolute";
         this.div.style.transformOrigin = "center";
         this.div.style.pointerEvents = "none"; // Prevent interaction issues
-
         // Create a rectangle to represent the robot
         this.div.style.width = "100%";
         this.div.style.height = "100%";
-        this.div.style.backgroundColor = "pink"; // Change color as needed
-        this.div.style.zIndex = 20000; // Change color as needed
-        this.div.style.border = "1px solid black"; // Border for visibility
+        this.div.style.backgroundColor = "rgba(255, 192, 203, 0.2)"; // light pink, 30% opacity
+        this.div.style.zIndex = 20000;
+        this.div.style.border = "1px solid black"; // Keep border for visibility
 
         this.getPanes().overlayLayer.appendChild(this.div);
       }
