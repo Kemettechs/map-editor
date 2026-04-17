@@ -327,8 +327,8 @@ export default function MapControls({
       <ActionIcon
         style={{ position: "fixed", top: 190, right: 5, zIndex: 9999 }}
         size="md"
-        color="blue"
-        variant={showCircle ? "filled" : "outline"}
+        color={showCircle ? "blue" : "gray"}
+        variant="filled"
         onClick={() => setShowCircle(!showCircle)}
       >
         <IconCircle size=".9rem" />

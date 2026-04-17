@@ -443,6 +443,7 @@ export default function MapContainer() {
               }}
             />
           )}
+          
           {lines.map((line, idx) => (
             <MemoPolyline key={idx} path={line} color="#7CFC00" />
           ))}
