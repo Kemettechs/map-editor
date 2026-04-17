@@ -56,7 +56,7 @@ export default function MapContainer() {
   const [generatedLine, setGeneratedLine] = useState([]); // Auto-generated path
   const [generatedLine2, setGeneratedLine2] = useState([]); // Auto-generated path
   const [mapCenter, setMapCenter] = useState(center);
-  const [circleRadius, setCircleRadius] = useState(10); // meters, matches MIN_TURNING_RADIUS
+  const [circleRadius, setCircleRadius] = useState(7); // meters, matches MIN_TURNING_RADIUS
   const [showCircle, setShowCircle] = useState(true);
   function generateGeoPath(
     startPoint,
@@ -443,7 +443,7 @@ export default function MapContainer() {
               }}
             />
           )}
-          
+
           {lines.map((line, idx) => (
             <MemoPolyline key={idx} path={line} color="#7CFC00" />
           ))}
