@@ -5,12 +5,12 @@ import {
   IconReload,
   IconUpload,
   IconMaximize,
-  IconMinimize
+  IconMinimize,
+  IconCircle
 } from "@tabler/icons-react";
 import Papa from "papaparse";
 import { useRef, useEffect, useState } from "react";
 import { computeLineLength } from "./pathUtils";
-
 export default function MapControls({
   isDrawing,
   toggleDrawing,
@@ -21,6 +21,10 @@ export default function MapControls({
   lines,
   setCurrentLength,
   setLines,
+  circleRadius, 
+  setCircleRadius,
+  showCircle, 
+  setShowCircle
 }) {
   const fileInputRef = useRef(null);
   const fileInputRefEndPoints = useRef(null);
@@ -319,8 +323,19 @@ export default function MapControls({
           </ActionIcon>
         </Tooltip>
       </div>
+    <Tooltip label={showCircle ? "Hide Circle" : "Show Circle"} position="left">
+      <ActionIcon
+        style={{ position: "fixed", top: 190, right: 5, zIndex: 9999 }}
+        size="md"
+        color="blue"
+        variant={showCircle ? "filled" : "outline"}
+        onClick={() => setShowCircle(!showCircle)}
+      >
+        <IconCircle size=".9rem" />
+      </ActionIcon>
+    </Tooltip>     
 
-      <Paper
+<Paper
         p="sm"
         shadow="sm"
         radius="md"
@@ -364,6 +379,27 @@ export default function MapControls({
         >
           Endpoints File
         </Button>
+
+        <div style={{ marginTop: "8px" }}>
+  <div style={{ fontSize: "11px", color: "#555", marginBottom: "4px" }}>
+    Turn Radius (m)
+  </div>
+  <input
+    type="number"
+    min={1}
+    max={500}
+    step={0.5}
+    value={circleRadius}
+    onChange={(e) => setCircleRadius(parseFloat(e.target.value) || 1)}
+    style={{
+      width: "100%",
+      padding: "2px 4px",
+      borderRadius: "4px",
+      border: "1px solid #ccc",
+      fontSize: "12px",
+    }}
+  />
+</div>
       </Paper>
 
 

@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import React from "react";
-
 import {
   GoogleMap,
   useLoadScript,
   Polyline,
   GroundOverlay,
   OverlayView,
+  Circle
 } from "@react-google-maps/api";
 import { ToastContainer } from "react-toastify";
 import RobotOverlay from "./components/RobotOverlay";
@@ -55,7 +55,9 @@ export default function MapContainer() {
   const [paths, setPaths] = useState([]);
   const [generatedLine, setGeneratedLine] = useState([]); // Auto-generated path
   const [generatedLine2, setGeneratedLine2] = useState([]); // Auto-generated path
-
+  const [mapCenter, setMapCenter] = useState(center);
+  const [circleRadius, setCircleRadius] = useState(10); // meters, matches MIN_TURNING_RADIUS
+  const [showCircle, setShowCircle] = useState(true);
   function generateGeoPath(
     startPoint,
     angle, // In degrees, clockwise from North (compass bearing)
@@ -371,6 +373,12 @@ export default function MapContainer() {
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
       {isLoaded ? (
         <GoogleMap
+        onCenterChanged={() => {
+            if (mapRef.current) {
+              const c = mapRef.current.getCenter();
+              setMapCenter({ lat: c.lat(), lng: c.lng() });
+            }
+          }}
           options={{
             disableDefaultUI: true,
             mapTypeId: "satellite",
@@ -421,7 +429,20 @@ export default function MapContainer() {
               }}
             />
           ))}
-
+          {showCircle && (
+            <Circle
+              center={mapCenter}
+              radius={circleRadius}
+              options={{
+                strokeColor: "#FF0000",
+                strokeOpacity: 0.9,
+                strokeWeight: 2,
+                fillOpacity: 0,
+                clickable: false,
+                zIndex: 5,
+              }}
+            />
+          )}
           {lines.map((line, idx) => (
             <MemoPolyline key={idx} path={line} color="#7CFC00" />
           ))}
@@ -506,6 +527,10 @@ export default function MapContainer() {
           lines={lines}
           setCurrentLength={setCurrentLength}
           setLines={setLines}
+          circleRadius={circleRadius}
+          setCircleRadius={setCircleRadius}
+          showCircle={showCircle}
+          setShowCircle={setShowCircle}
         />
       </Portal>
 
