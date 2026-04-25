@@ -2,13 +2,17 @@ import proj4 from "proj4";
 
 const WGS84 = "EPSG:4326";
 
-export const latlngToCartesian = (lat, lng) => {
-  const utmZone = Math.floor((lng + 180) / 6) + 1;
+// Replace ONLY the latlngToCartesian function in pathUtils.js with this.
+// Everything else in pathUtils.js stays the same.
+
+export const latlngToCartesian = (lat, lng, forceZone = null) => {
+  const utmZone = forceZone !== null
+    ? forceZone
+    : Math.floor((lng + 180) / 6) + 1;
   const UTM_PROJ = `+proj=utm +zone=${utmZone} +ellps=WGS84 +datum=WGS84 +units=m +no_defs`;
   const [x, y] = proj4(WGS84, UTM_PROJ, [lng, lat]);
   return { x, y, utmZone };
 };
-
 export const cartesianToLatlng = (x, y, utmZone) => {
   const UTM_PROJ = `+proj=utm +zone=${utmZone} +ellps=WGS84 +datum=WGS84 +units=m +no_defs`;
   const [lng, lat] = proj4(UTM_PROJ, WGS84, [x, y]);
